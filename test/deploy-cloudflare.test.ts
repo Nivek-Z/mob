@@ -84,7 +84,7 @@ describe('declarative deployment subprocess pipeline', () => {
     expect(calls.map(call => call.githubToken)).toEqual(Array(4).fill('fixture-github-readonly'));
     expect(calls.map(call => call.cwd)).toEqual(Array(4).fill(fixture));
     expect(calls.map(call => call.args)).toEqual([
-      ['--apply', '--resources-only'], [], ['deploy', '--no-build'], ['--apply'],
+      ['--apply', '--resources-only'], [], ['deploy'], ['--apply'],
     ]);
     expect(result.stdout + result.stderr).not.toContain('fixture-management-token');
     expect(result.stdout + result.stderr).not.toContain('fixture-deployment-token');
