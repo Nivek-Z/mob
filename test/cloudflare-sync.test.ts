@@ -135,6 +135,16 @@ describe('Declarative Cloudflare synchronization', () => {
       expect(f.writes).toEqual([]);
     }
   });
+  it('does not fail a connected build when GitHub autofill is rejected', async () => {
+    const options: { appUnauthorized?: boolean } = {};
+    const f = fixture(options);
+    const first = await synchronize({ ...f, apply: true });
+    options.appUnauthorized = true;
+    f.writes.length = 0;
+    const second = await synchronize({ ...f, wrangler: first.updatedWrangler, apply: true });
+    expect(second.applied).toBe(true);
+    expect(second.actions).toEqual([]);
+  });
   it('does not claim or modify a similarly named Access application on another hostname', async () => {
     const f = fixture({ existingWrongHost: true });
     await expect(synchronize({ ...f, apply: true })).rejects.toMatchObject({ code: 'ACCESS_OWNERSHIP_MISMATCH' }); expect(f.writes).toEqual([]);

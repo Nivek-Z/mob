@@ -190,9 +190,11 @@ async function preflightBuilds(client, plan, fetcher, environment) {
   const existing = matching[0] ?? (environment.WORKERS_CI && triggers.length === 1 ? triggers[0] : null);
   if (existing && (existing.external_script_id !== worker.tag || existing.repo_connection?.provider_type !== 'github' || String(existing.repo_connection.repo_id) !== String(repoInfo.id) || String(existing.repo_connection.provider_account_id) !== String(ownerInfo.id))) fail('TRIGGER_OWNERSHIP_MISMATCH', 'The named Builds trigger belongs to another repository or Worker. Choose a different triggerName; existing resources will not be deleted.');
   if (!existing && triggers.length >= 2) fail('BUILDS_TRIGGER_LIMIT', 'This Worker already has two Builds triggers. Choose an existing matching trigger or adjust the dashboard manually.');
-  // This supported read verifies that Cloudflare's GitHub App can access the repository before any mutation.
-  try { await client.get(`/builds/repos/github/${ownerInfo.id}/${repoInfo.id}/config_autofill`); }
-  catch (error) { throw new SyncError('GITHUB_APP_BOOTSTRAP_REQUIRED', `Authorize the Cloudflare GitHub App for this repository once via Worker Settings > Builds > Connect, and verify Builds API permissions (HTTP ${error.status ?? 'unavailable'}).`); }
+  // An existing trigger already proves the GitHub App is connected. config_autofill can return 400 for that repository and would fail a finished deploy.
+  if (!existing) {
+    try { await client.get(`/builds/repos/github/${ownerInfo.id}/${repoInfo.id}/config_autofill`); }
+    catch (error) { throw new SyncError('GITHUB_APP_BOOTSTRAP_REQUIRED', `Authorize the Cloudflare GitHub App for this repository once via Worker Settings > Builds > Connect, and verify Builds API permissions (HTTP ${error.status ?? 'unavailable'}).`); }
+  }
   return { enabled: true, worker, token: token.build_token_uuid, ownerInfo, repoInfo, existing, triggers };
 }
 async function privateBucket(client, name, exists) {
