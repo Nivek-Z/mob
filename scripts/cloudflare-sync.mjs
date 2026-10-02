@@ -141,6 +141,21 @@ function policyFor(plan, id) {
 function appFor(plan, policy) {
   return { name: plan.access.name, type: 'self_hosted', domain: plan.access.hostname + '/admin', destinations: plan.access.paths.map((pathname) => ({ type: 'public', uri: plan.access.hostname + pathname, overrides: [] })), session_duration: plan.access.sessionDuration, app_launcher_visible: false, options_preflight_bypass: false, policies: [policy] };
 }
+function selectBuildToken(tokens, plan, environment) {
+  if (plan.builds.buildTokenUuid) {
+    const token = tokens.find((item) => item.build_token_uuid === plan.builds.buildTokenUuid);
+    if (!token) fail('BUILD_TOKEN_REQUIRED', 'builds.buildTokenUuid does not match a build token in this account.');
+    return token;
+  }
+  const name = typeof environment.BUILDS_TOKEN_NAME === 'string' ? environment.BUILDS_TOKEN_NAME.trim() : '';
+  if (name) {
+    if (name.length > 128 || /[\x00-\x1f]/.test(name)) fail('INVALID_CONFIG', 'BUILDS_TOKEN_NAME must be a token name without control characters.');
+    const named = tokens.filter((item) => item.build_token_name === name);
+    if (named.length !== 1) fail('BUILD_TOKEN_REQUIRED', 'BUILDS_TOKEN_NAME must match exactly one build token. ' + named.length + ' tokens matched.');
+    return named[0];
+  }
+  return tokens.length === 1 ? tokens[0] : null;
+}
 function buildFor(plan, token) {
   const builds = plan.builds;
   return { trigger_name: builds.triggerName, build_token_uuid: token, build_command: builds.buildCommand, deploy_command: builds.deployCommand, root_directory: builds.rootDirectory, branch_includes: builds.branchIncludes, branch_excludes: builds.branchExcludes, path_includes: builds.pathIncludes, path_excludes: builds.pathExcludes };
@@ -166,8 +181,8 @@ async function preflightBuilds(client, plan, fetcher, environment) {
   ]);
   const worker = workers.find((item) => item.id === plan.workerName);
   if (!worker?.tag || !/^[a-f0-9]{32}$/i.test(worker.tag)) fail('WORKER_BOOTSTRAP_REQUIRED', 'Deploy the Worker once before syncing Builds. Run --apply --resources-only, then npm run deploy, then --apply.');
-  const token = plan.builds.buildTokenUuid ? tokens.find((item) => item.build_token_uuid === plan.builds.buildTokenUuid) : tokens.length === 1 ? tokens[0] : null;
-  if (!token?.build_token_uuid || !UUID.test(token.build_token_uuid)) fail('BUILD_TOKEN_REQUIRED', 'Select or create a build deployment token once in Worker Settings > Builds > API token. If multiple tokens exist, set builds.buildTokenUuid explicitly.');
+  const token = selectBuildToken(tokens, plan, environment);
+  if (!token?.build_token_uuid || !UUID.test(token.build_token_uuid)) fail('BUILD_TOKEN_REQUIRED', 'Select or create a build deployment token once in Worker Settings > Builds > API token. If multiple tokens exist, set BUILDS_TOKEN_NAME or builds.buildTokenUuid.');
   if (!Number.isSafeInteger(ownerInfo.id) || !Number.isSafeInteger(repoInfo.id) || repoInfo.owner?.id !== ownerInfo.id || String(repoInfo.full_name).toLowerCase() !== `${plan.repository.owner}/${plan.repository.repo}`.toLowerCase()) fail('GITHUB_INVALID_RESPONSE', 'GitHub returned mismatched repository metadata.');
   const triggers = await client.list(`/builds/workers/${worker.tag}/triggers`);
   const matching = triggers.filter((item) => item.trigger_name === plan.builds.triggerName);

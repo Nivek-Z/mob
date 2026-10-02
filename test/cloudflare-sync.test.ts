@@ -26,7 +26,7 @@ function fixture(options: { publicManaged?: boolean; publicCustom?: boolean; noW
     let result: any;
     if (method !== 'GET') writes.push({ endpoint, method, payload });
     if (endpoint === '/workers/scripts') result = options.noWorker ? [] : [{ id: 'mob', tag }];
-    else if (endpoint === '/builds/tokens') result = Array.from({ length: options.tokenCount ?? 1 }, (_, index) => ({ build_token_uuid: index ? appId : tokenId }));
+    else if (endpoint === '/builds/tokens') result = Array.from({ length: options.tokenCount ?? 1 }, (_, index) => ({ build_token_uuid: index ? appId : tokenId, build_token_name: index ? 'other-build-token' : 'BLOG自用' }));
     else if (endpoint === `/builds/workers/${tag}/triggers`) result = trigger ? [trigger] : [];
     else if (endpoint?.endsWith('/config_autofill')) { if (options.appUnauthorized) return new Response(JSON.stringify({ success: false, errors: [{ message: 'TOP_SECRET' }] }), { status: 403 }); result = {}; }
     else if (endpoint === '/builds/repos/connections') result = connection;
@@ -111,6 +111,22 @@ describe('Declarative Cloudflare synchronization', () => {
       await expect(synchronize({ ...f, apply: true })).rejects.toBeInstanceOf(Error);
       expect(f.writes).toEqual([]);
     }
+  });
+  it('selects one build token by BUILDS_TOKEN_NAME when several exist', async () => {
+    const f = fixture({ tokenCount: 2 });
+    const result = await synchronize({ ...f, apply: true, environment: { ...f.environment, BUILDS_TOKEN_NAME: 'BLOG自用' } });
+    expect(result.applied).toBe(true);
+    expect(f.writes.find((entry) => entry.endpoint === '/builds/triggers').payload.build_token_uuid).toBe(tokenId);
+  });
+  it('does not guess a build token when the name is missing or ambiguous', async () => {
+    const missing = fixture({ tokenCount: 2 });
+    await expect(synchronize({ ...missing, apply: true, environment: { ...missing.environment, BUILDS_TOKEN_NAME: 'missing' } })).rejects.toMatchObject({ code: 'BUILD_TOKEN_REQUIRED' });
+    expect(missing.writes).toEqual([]);
+    const named = fixture({ tokenCount: 2 });
+    named.config.builds.buildTokenUuid = appId;
+    const chosen = await synchronize({ ...named, apply: true, environment: { ...named.environment, BUILDS_TOKEN_NAME: 'BLOG自用' } });
+    expect(chosen.applied).toBe(true);
+    expect(named.writes.find((entry) => entry.endpoint === '/builds/triggers').payload.build_token_uuid).toBe(appId);
   });
   it('refuses public managed or custom R2 access without automatically deleting anything', async () => {
     for (const options of [{ publicManaged: true }, { publicCustom: true }]) {
