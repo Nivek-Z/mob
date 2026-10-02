@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mob</title>
+  <style>
+    :root { color-scheme: light dark; --ink: #1c1915; --muted: #6b645c; --line: #e4ddd4; --paper: #f7f4ef; --accent: #9a3412; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #f5f0e8; --muted: #b7aea3; --line: #3a342c; --paper: #161411; --accent: #fdba74; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 17px/1.6 "Iowan Old Style", Palatino, "Songti SC", serif; color: var(--ink); background: var(--paper); }
+    main { max-width: 40rem; margin: 0 auto; padding: 4.5rem 1.25rem 3rem; }
+    p.mark { margin: 0 0 .5rem; font: 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+    h1 { margin: 0 0 .75rem; font-size: 2.4rem; font-weight: 560; letter-spacing: -.03em; }
+    p { margin: 0 0 1rem; }
+    .muted { color: var(--muted); }
+    a { color: inherit; }
+    nav { margin: 1.5rem 0 2rem; font: 14px/1 ui-sans-serif, system-ui, sans-serif; }
+    nav a { border-bottom: 1px solid var(--line); text-decoration: none; padding-bottom: .1rem; }
+    ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+    li { padding: .85rem 0; border-bottom: 1px solid var(--line); }
+    li span { display: block; color: var(--muted); font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="mark">占位</p>
+    <h1>前台</h1>
+    <p class="muted">公开页面还没做。这里只确认站点已经打开，并列出已经发布的文章。</p>
+    <nav><a href="/admin/">进入管理页</a></nav>
+    <p id="status" class="muted">正在读取文章…</p>
+    <ul id="posts" hidden></ul>
+  </main>
+  <script>
+    const status = document.getElementById("status");
+    const list = document.getElementById("posts");
+    fetch("/api/posts").then(async (response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      const body = await response.json();
+      const items = Array.isArray(body.data?.items) ? body.data.items : [];
+      if (!items.length) { status.textContent = "还没有已发布的文章。"; return; }
+      status.hidden = true;
+      list.hidden = false;
+      for (const post of items) {
+        const item = document.createElement("li");
+        const title = document.createElement("strong");
+        title.textContent = post.title || post.slug || "未命名";
+        const meta = document.createElement("span");
+        meta.textContent = post.slug || "";
+        item.append(title, meta);
+        list.append(item);
+      }
+    }).catch(() => { status.textContent = "文章列表暂时读不出来。"; });
+  </script>
+</body>
+</html>

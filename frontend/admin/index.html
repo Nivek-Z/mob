@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理 · mob</title>
+  <style>
+    :root { color-scheme: light dark; --ink: #1c1915; --muted: #6b645c; --line: #e4ddd4; --paper: #f7f4ef; --accent: #9a3412; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #f5f0e8; --muted: #b7aea3; --line: #3a342c; --paper: #161411; --accent: #fdba74; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 17px/1.6 "Iowan Old Style", Palatino, "Songti SC", serif; color: var(--ink); background: var(--paper); }
+    main { max-width: 40rem; margin: 0 auto; padding: 4.5rem 1.25rem 3rem; }
+    p.mark { margin: 0 0 .5rem; font: 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+    h1 { margin: 0 0 .75rem; font-size: 2.4rem; font-weight: 560; letter-spacing: -.03em; }
+    p { margin: 0 0 1rem; }
+    .muted { color: var(--muted); }
+    a { color: inherit; }
+    nav { margin: 1.5rem 0 2rem; font: 14px/1 ui-sans-serif, system-ui, sans-serif; }
+    nav a { border-bottom: 1px solid var(--line); text-decoration: none; padding-bottom: .1rem; }
+    dl { margin: 0; display: grid; grid-template-columns: 6rem 1fr; gap: .35rem 1rem; font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    dt { color: var(--muted); }
+    dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="mark">占位</p>
+    <h1>管理页</h1>
+    <p class="muted">编辑文章和上传图片的界面还没做。这一页只确认登录已经通过。</p>
+    <nav><a href="/">返回前台</a></nav>
+    <p id="status" class="muted">正在确认身份…</p>
+    <dl id="session" hidden>
+      <dt>邮箱</dt><dd id="email">—</dd>
+      <dt>文章</dt><dd id="count">—</dd>
+    </dl>
+  </main>
+  <script>
+    const status = document.getElementById("status");
+    const session = document.getElementById("session");
+    async function read(path) {
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    }
+    Promise.all([read("/api/admin/session"), read("/api/admin/posts")]).then(([identity, posts]) => {
+      document.getElementById("email").textContent = identity.data?.email || "未知";
+      const items = Array.isArray(posts.data?.items) ? posts.data.items : [];
+      document.getElementById("count").textContent = String(items.length);
+      status.hidden = true;
+      session.hidden = false;
+    }).catch(() => { status.textContent = "身份没有确认成功。请从 /admin/ 重新登录。"; });
+  </script>
+</body>
+</html>
