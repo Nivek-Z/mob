@@ -12,10 +12,10 @@ function configuration() {
     mob: { schemaVersion: 1, frontend: { mode: 'auto', installCommand: ['npm', 'ci'], buildCommand: ['npm', 'run', 'build'], outputDirectory: 'dist' } },
   };
 }
-function fixture(options: { publicManaged?: boolean; publicCustom?: boolean; noWorker?: boolean; tokenCount?: number; existingWrongHost?: boolean; appUnauthorized?: boolean } = {}) {
+function fixture(options: { publicManaged?: boolean; publicCustom?: boolean; noWorker?: boolean; tokenCount?: number; existingWrongHost?: boolean; managedOnOtherHost?: boolean; appUnauthorized?: boolean } = {}) {
   const cfg = configuration();
-  let app: Record<string, any> | null = options.existingWrongHost ? { id: appId, name: 'mob-admin', type: 'self_hosted', domain: 'other.real-domain.dev/admin' } : null;
-  let policies: Record<string, any>[] = [];
+  let app: Record<string, any> | null = options.existingWrongHost || options.managedOnOtherHost ? { id: appId, name: 'mob-admin', type: 'self_hosted', domain: 'other.real-domain.dev/admin', destinations: [{ type: 'public', uri: 'other.real-domain.dev/admin', overrides: [] }] } : null;
+  let policies: Record<string, any>[] = options.managedOnOtherHost ? [{ id: policyId, name: 'mob-admin-emails', decision: 'allow', precedence: 1, include: [{ email: { email: 'old@real-domain.dev' } }], exclude: [], require: [] }] : [];
   let trigger: Record<string, any> | null = null;
   const connection = { repo_connection_uuid: connectionId, provider_type: 'github', provider_account_id: '1', provider_account_name: 'owner', repo_id: '2', repo_name: 'mob' };
   const writes: any[] = [];
@@ -122,6 +122,15 @@ describe('Declarative Cloudflare synchronization', () => {
   it('does not claim or modify a similarly named Access application on another hostname', async () => {
     const f = fixture({ existingWrongHost: true });
     await expect(synchronize({ ...f, apply: true })).rejects.toMatchObject({ code: 'ACCESS_OWNERSHIP_MISMATCH' }); expect(f.writes).toEqual([]);
+  });
+  it('retargets the managed Access application when the site hostname changes', async () => {
+    const f = fixture({ managedOnOtherHost: true });
+    const result = await synchronize({ ...f, apply: true });
+    expect(result.actions).toContain('upsert Access application');
+    const update = f.writes.find((entry) => entry.endpoint === `/access/apps/${appId}` && entry.method === 'PUT');
+    expect(update.payload.domain).toBe('blog.real-domain.dev/admin');
+    expect(update.payload.destinations.map((destination: any) => destination.uri)).toEqual(['blog.real-domain.dev/admin', 'blog.real-domain.dev/admin/*', 'blog.real-domain.dev/api/admin', 'blog.real-domain.dev/api/admin/*']);
+    expect(f.writes.some((entry) => entry.method === 'DELETE')).toBe(false);
   });
   it('does not disclose upstream response bodies, authorization headers, or credentials', async () => {
     const f = fixture(); const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: false, errors: [{ message: 'TOP_SECRET private details' }] }), { status: 403 }));

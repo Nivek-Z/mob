@@ -203,9 +203,12 @@ export async function synchronize({ config, wrangler, mob, apply = false, resour
   const matchingApps = apps.filter((app) => app.name === plan.access.name);
   if (matchingApps.length > 1) fail('AMBIGUOUS_ACCESS_APP', 'Multiple Access applications share the configured name. Resolve this manually.');
   let app = matchingApps[0] ?? null;
-  if (app && (app.type !== 'self_hosted' || publicHost(app).length !== 1 || publicHost(app)[0] !== plan.access.hostname)) fail('ACCESS_OWNERSHIP_MISMATCH', 'The named Access application belongs to another hostname. Choose another access.name; existing resources will not be modified.');
+  if (app && app.type !== 'self_hosted') fail('ACCESS_OWNERSHIP_MISMATCH', 'The named Access application belongs to another hostname. Choose another access.name; existing resources will not be modified.');
   const policies = app ? await client.list(`/access/apps/${app.id}/policies`, true) : [];
   if (policies.length && (policies.length !== 1 || policies[0].name !== plan.workerName + '-admin-emails')) fail('ACCESS_POLICY_MISMATCH', 'The existing Access application has unmanaged policies. Resolve them manually or choose a new access.name.');
+  const hosts = app ? publicHost(app) : [];
+  // The managed email policy identifies an app this script created. A later hostname change retargets that same app; unrelated apps are left untouched.
+  if (app && (hosts.length !== 1 || hosts[0] !== plan.access.hostname) && policies.length !== 1) fail('ACCESS_OWNERSHIP_MISMATCH', 'The named Access application belongs to another hostname. Choose another access.name; existing resources will not be modified.');
   const desiredPolicy = policyFor(plan, policies[0]?.id);
   const desiredApp = appFor(plan, desiredPolicy);
   const actions = [];
