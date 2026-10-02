@@ -3,30 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nivek</title>
+  <title>标签 - Nivek</title>
   <link rel="stylesheet" href="/css/site.css">
 </head>
 <body>
   <header class="bar">
     <a class="brand" href="/">Nivek</a>
     <nav class="nav">
-      <a href="/" aria-current="page">主页</a>
+      <a href="/">主页</a>
       <a href="/archive.html">归档</a>
-      <a href="/tags.html">标签</a>
+      <a href="/tags.html" aria-current="page">标签</a>
       <a href="/about.html">关于</a>
     </nav>
   </header>
   <main class="page">
-    <section class="hero">
-      <p class="kicker">笔记</p>
-      <h1>Nivek</h1>
-      <p class="line">把做过的事写下来。</p>
-    </section>
-    <section class="bento" id="bento"><article class="card"><p class="quiet">正在读取文章…</p></article></section>
+    <div class="page-head">
+      <p class="kicker">Tags</p>
+      <h1>标签</h1>
+      <p id="page-note">正在读取…</p>
+    </div>
+    <div class="tag-cloud" id="tags"></div>
   </main>
   <footer class="page">Nivek</footer>
   <script src="/js/api.js"></script>
   <script src="/js/markdown.js"></script>
-  <script src="/js/home.js"></script>
+  <script src="/js/tags.js"></script>
 </body>
 </html>

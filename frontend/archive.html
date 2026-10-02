@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>归档 - Nivek</title>
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="/">Nivek</a>
+    <nav class="nav">
+      <a href="/">主页</a>
+      <a href="/archive.html" aria-current="page">归档</a>
+      <a href="/tags.html">标签</a>
+      <a href="/about.html">关于</a>
+    </nav>
+  </header>
+  <main class="page">
+    <div class="page-head">
+      <p class="kicker">Archive</p>
+      <h1 id="page-title">归档</h1>
+      <p id="page-note">正在读取…</p>
+      <form class="search" action="/archive.html">
+        <input id="q" name="q" type="search" maxlength="200" placeholder="搜索标题、摘要或正文">
+        <button type="submit">搜索</button>
+      </form>
+    </div>
+    <div id="list"></div>
+  </main>
+  <footer class="page">Nivek</footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/markdown.js"></script>
+  <script src="/js/archive.js"></script>
+</body>
+</html>
