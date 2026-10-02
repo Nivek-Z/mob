@@ -1,0 +1,1151 @@
+openapi: 3.1.0
+info:
+  title: mob blog API
+  version: 0.1.0
+  description: GitHub Markdown + private R2. Success {data}; errors {error,requestId}. Frontend and
+    API use the same origin. Admin requires Access; development+localhost only may use configured
+    DEV_AUTH_TOKEN as Bearer. Runtime GITHUB_TOKEN is required even for a public repository. Article
+    index supports at most 500 articles and 32 MiB each for total sources and serialized index.
+servers:
+  - url: /
+    description: Same-origin production
+  - url: http://localhost:8787
+    description: Local development
+paths:
+  /api/health:
+    get:
+      operationId: health
+      summary: Worker liveness; does not probe external services
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - status
+                    properties:
+                      status:
+                        type: string
+                        const: ok
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/posts:
+    get:
+      operationId: listPublishedPosts
+      summary: Published metadata sorted by first publication date descending
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+            maximum: 500
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - items
+                      - total
+                      - limit
+                      - offset
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PostMetadata"
+                      total:
+                        type: integer
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/posts/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      operationId: getPublishedPost
+      summary: Published article; drafts and missing articles return 404
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/PublicPost"
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/session:
+    get:
+      operationId: session
+      summary: Current administrator
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - email
+                      - subject
+                    properties:
+                      email:
+                        type: string
+                        format: email
+                      subject:
+                        type: string
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/posts:
+    get:
+      operationId: listAdminPosts
+      summary: All articles including drafts, markdown and SHA
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Post"
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/posts/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      operationId: getAdminPost
+      summary: Read latest article and SHA
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Post"
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: savePost
+      summary: Save Markdown to GitHub
+      description: sha:null creates; current blob SHA updates. 409 requires manual merge. All media must
+        be uploaded first. Managed media URLs must match the returned filename; merged media
+        references cannot exceed 200. INVALID_MEDIA_URL/TOO_MANY_MEDIA_REFERENCES reject invalid
+        links. Writes are serialized by the global SQLite Durable Object; missing binding returns
+        COORDINATOR_NOT_CONFIGURED.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePostInput"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - post
+                      - commitSha
+                    properties:
+                      post:
+                        $ref: "#/components/schemas/Post"
+                      commitSha:
+                        type: string
+                    additionalProperties: false
+                additionalProperties: false
+        "201":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - post
+                      - commitSha
+                    properties:
+                      post:
+                        $ref: "#/components/schemas/Post"
+                      commitSha:
+                        type: string
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deletePost
+      summary: Delete article with expected SHA
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sha
+              properties:
+                sha:
+                  type: string
+                  pattern: ^[0-9a-f]{40}$
+              additionalProperties: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - commitSha
+                    properties:
+                      commitSha:
+                        type: string
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/uploads:
+    post:
+      operationId: createUpload
+      summary: Start a 24-hour upload session
+      description: Default maximum 1 GiB. <=8 MiB single, otherwise multipart with 8 MiB slices.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - filename
+                - contentType
+                - size
+              properties:
+                filename:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                contentType:
+                  type: string
+                  enum:
+                    - image/jpeg
+                    - image/png
+                    - image/gif
+                    - image/webp
+                    - image/avif
+                    - video/mp4
+                    - video/webm
+                size:
+                  type: integer
+                  minimum: 1
+                  maximum: 5368709120
+              additionalProperties: false
+      responses:
+        "201":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UploadSession"
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/uploads/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getUpload
+      summary: Read session without uploaded part list
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UploadSession"
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: abortUpload
+      summary: Cancel incomplete upload
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - aborted
+                    properties:
+                      aborted:
+                        type: boolean
+                        const: true
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/uploads/{id}/body:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: uploadSingle
+      summary: Raw binary single-file upload; success finishes it
+      description: Maximum 8 MiB. Retrying a completed single upload returns the media record.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/MediaRecord"
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+  /api/admin/uploads/{id}/parts/{number}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: number
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    put:
+      operationId: uploadPart
+      summary: Raw multipart slice, index starting at 1
+      description: Non-final slices must be exactly partSize bytes; final slice must exactly match
+        remaining bytes.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - partNumber
+                      - etag
+                    properties:
+                      partNumber:
+                        type: integer
+                        minimum: 1
+                      etag:
+                        type: string
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+  /api/admin/uploads/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: completeUpload
+      summary: Complete media; server collects ETags
+      description: Idempotent completion. 409 UPLOAD_INCOMPLETE provides details.missingParts.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: []
+              properties: {}
+              additionalProperties: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/MediaRecord"
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/media:
+    get:
+      operationId: listMedia
+      summary: Completed media, up to 25 per page
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - items
+                      - cursor
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MediaRecord"
+                      cursor:
+                        type:
+                          - string
+                          - "null"
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/media/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    delete:
+      operationId: deleteMedia
+      summary: Delete unreferenced media
+      description: 409 MEDIA_IN_USE when any article including a draft references the media.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - deleted
+                    properties:
+                      deleted:
+                        type: boolean
+                        const: true
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/media/{id}/file:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: Range
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: If-None-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: If-Range
+        in: header
+        required: false
+        schema:
+          type: string
+    get:
+      operationId: previewMedia
+      summary: Private media preview
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: File bytes; HEAD has no body.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Single byte range with Content-Range.
+        "304":
+          description: Not modified.
+        "416":
+          description: "Invalid range. Content-Range: bytes */size."
+        default:
+          $ref: "#/components/responses/Error"
+    head:
+      operationId: headPrivateMedia
+      summary: Private media headers
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: File bytes; HEAD has no body.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Single byte range with Content-Range.
+        "304":
+          description: Not modified.
+        "416":
+          description: "Invalid range. Content-Range: bytes */size."
+        default:
+          $ref: "#/components/responses/Error"
+  /media/{id}/{filename}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Range
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: If-None-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: If-Range
+        in: header
+        required: false
+        schema:
+          type: string
+    get:
+      operationId: readMedia
+      summary: Media referenced by a published article; otherwise 404
+      responses:
+        "200":
+          description: File bytes; HEAD has no body.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Single byte range with Content-Range.
+        "304":
+          description: Not modified.
+        "416":
+          description: "Invalid range. Content-Range: bytes */size."
+        default:
+          $ref: "#/components/responses/Error"
+    head:
+      operationId: headMedia
+      summary: Published media headers
+      responses:
+        "200":
+          description: File bytes; HEAD has no body.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Single byte range with Content-Range.
+        "304":
+          description: Not modified.
+        "416":
+          description: "Invalid range. Content-Range: bytes */size."
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    CloudflareAccess:
+      type: apiKey
+      in: header
+      name: Cf-Access-Jwt-Assertion
+      description: Valid Access JWT injected at edge after browser login. Browser normally sends
+        CF_Authorization cookie.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uri
+        description: Must equal SITE_ORIGIN; browsers set it automatically.
+  schemas:
+    Post:
+      type: object
+      required:
+        - slug
+        - sha
+        - title
+        - markdown
+        - description
+        - tags
+        - status
+        - createdAt
+        - updatedAt
+        - publishedAt
+        - cover
+        - mediaIds
+      properties:
+        slug:
+          type: string
+          pattern: ^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$
+        sha:
+          type: string
+          pattern: ^[0-9a-f]{40}$
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        markdown:
+          type: string
+          description: UTF-8 byte length at most 512 KiB.
+        description:
+          type: string
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 20
+          uniqueItems: true
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        cover:
+          type:
+            - string
+            - "null"
+          format: uri
+          maxLength: 2048
+        mediaIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+          maxItems: 200
+          uniqueItems: true
+      additionalProperties: false
+    PublicPost:
+      type: object
+      required:
+        - slug
+        - title
+        - markdown
+        - description
+        - tags
+        - status
+        - createdAt
+        - updatedAt
+        - publishedAt
+        - cover
+        - mediaIds
+      properties:
+        slug:
+          type: string
+          pattern: ^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        markdown:
+          type: string
+          description: UTF-8 byte length at most 512 KiB.
+        description:
+          type: string
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 20
+          uniqueItems: true
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        cover:
+          type:
+            - string
+            - "null"
+          format: uri
+          maxLength: 2048
+        mediaIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+          maxItems: 200
+          uniqueItems: true
+      additionalProperties: false
+    PostMetadata:
+      type: object
+      required:
+        - slug
+        - title
+        - description
+        - tags
+        - status
+        - createdAt
+        - updatedAt
+        - publishedAt
+        - cover
+        - mediaIds
+      properties:
+        slug:
+          type: string
+          pattern: ^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 20
+          uniqueItems: true
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        cover:
+          type:
+            - string
+            - "null"
+          format: uri
+          maxLength: 2048
+        mediaIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+          maxItems: 200
+          uniqueItems: true
+      additionalProperties: false
+    SavePostInput:
+      type: object
+      required:
+        - sha
+        - title
+        - markdown
+        - status
+      properties:
+        sha:
+          type:
+            - string
+            - "null"
+          pattern: ^[0-9a-f]{40}$
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        markdown:
+          type: string
+          description: UTF-8 byte length at most 512 KiB.
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+        description:
+          type: string
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 20
+          uniqueItems: true
+        cover:
+          type:
+            - string
+            - "null"
+          format: uri
+          maxLength: 2048
+        mediaIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+          maxItems: 200
+          uniqueItems: true
+      additionalProperties: false
+    MediaRecord:
+      type: object
+      required:
+        - id
+        - key
+        - filename
+        - contentType
+        - size
+        - owner
+        - createdAt
+        - url
+      properties:
+        id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+        key:
+          type: string
+        filename:
+          type: string
+        contentType:
+          type: string
+          enum:
+            - image/jpeg
+            - image/png
+            - image/gif
+            - image/webp
+            - image/avif
+            - video/mp4
+            - video/webm
+        size:
+          type: integer
+          minimum: 1
+          maximum: 5368709120
+        owner:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+          format: uri
+      additionalProperties: false
+    UploadSession:
+      type: object
+      required:
+        - id
+        - key
+        - filename
+        - contentType
+        - size
+        - owner
+        - createdAt
+        - url
+        - expiresAt
+        - mode
+        - partSize
+        - partCount
+      properties:
+        id:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+        key:
+          type: string
+        filename:
+          type: string
+        contentType:
+          type: string
+          enum:
+            - image/jpeg
+            - image/png
+            - image/gif
+            - image/webp
+            - image/avif
+            - video/mp4
+            - video/webm
+        size:
+          type: integer
+          minimum: 1
+          maximum: 5368709120
+        owner:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+        mode:
+          type: string
+          enum:
+            - single
+            - multipart
+        partSize:
+          type: integer
+          const: 8388608
+        partCount:
+          type: integer
+          minimum: 1
+        uploadId:
+          type: string
+      additionalProperties: false
+    Error:
+      type: object
+      required:
+        - error
+        - requestId
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              description: Optional structured error context
+        requestId:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+      additionalProperties: false
+  responses:
+    Error:
+      description: API error. Access edge may redirect to HTML login before reaching Worker.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

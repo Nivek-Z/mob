@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "accountId": "replace-with-account-id",
+  "access": {
+    "enabled": true,
+    "name": "mob-admin",
+    "sessionDuration": "8h",
+    "paths": ["/admin", "/admin/*", "/api/admin", "/api/admin/*"]
+  },
+  "builds": {
+    "enabled": true,
+    "triggerName": "mob-main",
+    "buildCommand": "npm run check && npm test",
+    "deployCommand": "npm run deploy:cloudflare",
+    "rootDirectory": "/",
+    "branchIncludes": ["main"],
+    "branchExcludes": [],
+    "pathIncludes": ["*"],
+    "pathExcludes": [],
+    "buildTokenUuid": ""
+  }
+}

@@ -1,0 +1,8 @@
+# Copy to .dev.vars for LOCAL development. Never commit .dev.vars.
+# Production stays APP_ENV=production and uses Cloudflare Access.
+APP_ENV="development"
+SITE_ORIGIN="http://localhost:8787"
+DEV_AUTH_TOKEN="replace-with-a-long-random-local-only-token"
+# Needed when exercising GitHub reads/writes against the real repository:
+GITHUB_TOKEN="replace-with-a-fine-grained-pat"
+ADMIN_EMAILS="local@example.com"

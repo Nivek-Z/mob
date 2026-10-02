@@ -1,0 +1,31 @@
+{
+  "name": "mob",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "npm run check && npm test && wrangler deploy --dry-run --outdir dist/worker",
+    "deploy": "wrangler deploy",
+    "cloudflare:plan": "node scripts/cloudflare-sync.mjs --dry-run",
+    "cloudflare:sync": "node scripts/cloudflare-sync.mjs --apply",
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs"
+  },
+  "dependencies": {
+    "jose": "^6.1.0",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261002.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}

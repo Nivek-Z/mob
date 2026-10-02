@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "frontend": {
+    "mode": "auto",
+    "installCommand": [
+      "npm",
+      "ci"
+    ],
+    "buildCommand": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "outputDirectory": "dist"
+  }
+}
