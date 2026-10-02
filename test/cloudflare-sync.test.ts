@@ -130,3 +130,12 @@ describe('Declarative Cloudflare synchronization', () => {
     expect(JSON.stringify(f.log.mock.calls)).not.toContain('TOP_SECRET');
   });
 });
+
+it('reuses the sole owned dashboard trigger for cloud bootstrap without creating a duplicate', async () => {
+  const f = fixture();
+  await synchronize({ ...f, apply: true });
+  f.config.builds.triggerName = 'mob-renamed';
+  await synchronize({ ...f, environment: { ...f.environment, WORKERS_CI: '1' }, apply: true });
+  expect(f.writes.filter(write => write.endpoint === '/builds/triggers' && write.method === 'POST')).toHaveLength(1);
+  expect(f.writes.some(write => write.method === 'PATCH' && write.payload?.trigger_name === 'mob-renamed')).toBe(true);
+});

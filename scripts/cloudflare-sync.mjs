@@ -172,7 +172,7 @@ async function preflightBuilds(client, plan, fetcher, environment) {
   const triggers = await client.list(`/builds/workers/${worker.tag}/triggers`);
   const matching = triggers.filter((item) => item.trigger_name === plan.builds.triggerName);
   if (matching.length > 1) fail('AMBIGUOUS_TRIGGER', 'Multiple Builds triggers share the configured name. Resolve this manually before syncing.');
-  const existing = matching[0] ?? null;
+  const existing = matching[0] ?? (environment.WORKERS_CI && triggers.length === 1 ? triggers[0] : null);
   if (existing && (existing.external_script_id !== worker.tag || existing.repo_connection?.provider_type !== 'github' || String(existing.repo_connection.repo_id) !== String(repoInfo.id) || String(existing.repo_connection.provider_account_id) !== String(ownerInfo.id))) fail('TRIGGER_OWNERSHIP_MISMATCH', 'The named Builds trigger belongs to another repository or Worker. Choose a different triggerName; existing resources will not be deleted.');
   if (!existing && triggers.length >= 2) fail('BUILDS_TRIGGER_LIMIT', 'This Worker already has two Builds triggers. Choose an existing matching trigger or adjust the dashboard manually.');
   // This supported read verifies that Cloudflare's GitHub App can access the repository before any mutation.

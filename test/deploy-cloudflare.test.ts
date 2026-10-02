@@ -10,7 +10,9 @@ const baseEnvironment = {
   CLOUDFLARE_API_TOKEN: 'fixture-deployment-token',
   CLOUDFLARE_SYNC_TOKEN: 'fixture-management-token',
   GITHUB_BOOTSTRAP_TOKEN: 'fixture-github-readonly',
-  FAIL_STEP: '',
+  FAIL_STEP: '', WORKERS_CI: '', WORKER_GITHUB_TOKEN: '',
+  CLOUDFLARE_ACCOUNT_ID: '', SITE_ORIGIN: '', ADMIN_EMAILS: '', ACCESS_TEAM_DOMAIN: '',
+  R2_BUCKET_NAME: '', BUILDS_TRIGGER_NAME: '', GITHUB_OWNER: '', GITHUB_REPO: '', GITHUB_BRANCH: '', POSTS_DIRECTORY: '',
 };
 const traceScript = String.raw`
 import fs from 'node:fs';
@@ -27,7 +29,9 @@ if (process.env.FAIL_STEP === step) process.exit(13);
 `;
 const wranglerScript = String.raw`
 const fs = require('node:fs');
+const secretFile = process.argv.includes('--secrets-file') ? process.argv[process.argv.indexOf('--secrets-file') + 1] : null;
 fs.appendFileSync('trace.jsonl', JSON.stringify({
+  secretFile, runtimeToken: secretFile ? JSON.parse(fs.readFileSync(secretFile, 'utf8')).GITHUB_TOKEN : null,
   step: 'deploy', args: process.argv.slice(2), cwd: process.cwd(),
   apiToken: process.env.CLOUDFLARE_API_TOKEN,
   githubToken: process.env.GITHUB_BOOTSTRAP_TOKEN,
@@ -49,8 +53,12 @@ describe('declarative deployment subprocess pipeline', () => {
     fixture = await mkdtemp(path.join(tmpdir(), 'mob-deploy-'));
     await mkdir(path.join(fixture, 'scripts'), { recursive: true });
     await mkdir(path.join(fixture, 'node_modules/wrangler/bin'), { recursive: true });
+    await mkdir(path.join(fixture, 'config'));
+    await copyFile(path.resolve('wrangler.jsonc'), path.join(fixture, 'wrangler.jsonc'));
+    await copyFile(path.resolve('config/cloudflare.json'), path.join(fixture, 'config/cloudflare.json'));
     await writeFile(path.join(fixture, 'package.json'), '{"type":"module"}');
     await writeFile(path.join(fixture, 'trace.jsonl'), '');
+    await copyFile(path.resolve('scripts/deploy-env.mjs'), path.join(fixture, 'scripts/deploy-env.mjs'));
     await copyFile(path.resolve('scripts/deploy-cloudflare.mjs'), path.join(fixture, 'scripts/deploy-cloudflare.mjs'));
     await writeFile(path.join(fixture, 'scripts/cloudflare-sync.mjs'), traceScript);
     await writeFile(path.join(fixture, 'scripts/build.mjs'), traceScript);
@@ -107,5 +115,18 @@ describe('declarative deployment subprocess pipeline', () => {
     const result = run(baseEnvironment, ['--unexpected']);
     expect(result.status).toBe(1);
     expect(await trace()).toEqual([]);
+  });
+  it.each(['', 'deploy'])('injects config and runtime PAT, cleaning secrets on success/failure: %s', async failure => {
+    const result=run({...baseEnvironment,WORKERS_CI:'1',WORKER_GITHUB_TOKEN:'fixture-runtime-token',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),SITE_ORIGIN:'https://blog.real.test',ADMIN_EMAILS:'owner@real.test',ACCESS_TEAM_DOMAIN:'team.cloudflareaccess.com',FAIL_STEP:failure});
+    expect(result.status).toBe(failure ? 1 : 0);
+    const worker=JSON.parse(await readFile(path.join(fixture,'wrangler.jsonc'),'utf8'));
+    expect(worker.vars.ADMIN_EMAILS).toBe('owner@real.test'); expect(worker.account_id).toBe('a'.repeat(32)); expect(worker.routes).toEqual([{pattern:'blog.real.test',custom_domain:true}]);
+    expect(JSON.stringify(worker)).not.toContain('fixture-runtime-token');
+    const deployed=(await trace()).find(call=>call.step==='deploy');
+    expect(deployed.runtimeToken).toBe('fixture-runtime-token'); await expect(readFile(deployed.secretFile)).rejects.toThrow();
+    expect(result.stdout+result.stderr).not.toContain('fixture-runtime-token');
+  });
+  it('requires runtime PAT for cloud builds before any mutation', async () => {
+    const result=run({...baseEnvironment,WORKERS_CI:'1'}); expect(result.status).toBe(1); expect(await trace()).toEqual([]); expect(result.stderr).toContain('WORKER_GITHUB_TOKEN');
   });
 });

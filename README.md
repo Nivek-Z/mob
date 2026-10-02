@@ -18,6 +18,8 @@ docs/                    接口、部署、架构、前端接入文档
 dist/client/             生成的静态文件，不提交 GitHub
 ```
 
+推荐部署方式：[全程 Cloudflare 控制台部署](docs/CLOUD-DEPLOY.md)，配置与 Secret 在构建环境填写，无需本地 PowerShell。
+
 ## 先阅读
 
 - [架构与数据流](docs/ARCHITECTURE.md)：文章、媒体、鉴权如何协作。
