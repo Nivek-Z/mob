@@ -39,10 +39,11 @@ try {
   const syncEnvironment = { ...process.env, CLOUDFLARE_API_TOKEN: syncToken };
   await step('Apply R2 and Access configuration', sync, ['--apply', '--resources-only'], syncEnvironment);
   // Workers Builds does not automatically honor Wrangler custom builds.
-  // Run the repository's frontend pipeline explicitly, then skip duplicate builds.
+  // Run the repository build script explicitly. Current Wrangler rejects
+  // --no-build, so deploy runs that script once more.
   await step('Build frontend assets from repository configuration', build, []);
   // Keep the platform-provided deployment token/OAuth environment unchanged.
-  const deployArgs = ['deploy', '--no-build'];
+  const deployArgs = ['deploy'];
   if (process.env.WORKER_GITHUB_TOKEN?.trim()) {
     secretDirectory = await mkdtemp(path.join(tmpdir(), 'mob-runtime-secrets-'));
     const secretFile = path.join(secretDirectory, 'secrets.json');
