@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/site.css">
 </head>
 <body>
-  <header class="bar">
+  <header class="bar bar-over">
     <a class="brand" href="/">Nivek</a>
     <nav class="nav">
       <a href="/" aria-current="page">主页</a>
@@ -16,12 +16,25 @@
       <a href="/about.html">关于</a>
     </nav>
   </header>
-  <main class="page">
-    <section class="hero">
+  <section class="hero" aria-label="首屏">
+    <div class="mosaic" aria-hidden="true">
+      <span style="--c:0;--r:0"></span><span style="--c:1;--r:0"></span><span style="--c:2;--r:0"></span><span style="--c:3;--r:0"></span><span style="--c:4;--r:0"></span><span style="--c:5;--r:0"></span>
+      <span style="--c:0;--r:1"></span><span style="--c:1;--r:1"></span><span style="--c:2;--r:1"></span><span style="--c:3;--r:1"></span><span style="--c:4;--r:1"></span><span style="--c:5;--r:1"></span>
+      <span style="--c:0;--r:2"></span><span style="--c:1;--r:2"></span><span style="--c:2;--r:2"></span><span style="--c:3;--r:2"></span><span style="--c:4;--r:2"></span><span style="--c:5;--r:2"></span>
+    </div>
+    <div class="hero-copy">
       <p class="kicker">笔记</p>
       <h1>Nivek</h1>
       <p class="line">把做过的事写下来。</p>
-    </section>
+      <nav class="quick">
+        <a href="/archive.html">归档</a>
+        <a href="/tags.html">标签</a>
+        <a href="/about.html">关于</a>
+        <a href="/admin/">管理</a>
+      </nav>
+    </div>
+  </section>
+  <main class="page">
     <section class="bento" id="bento"><article class="card"><p class="quiet">正在读取文章…</p></article></section>
   </main>
   <footer class="page">Nivek</footer>

@@ -26,7 +26,19 @@
         <button type="submit">搜索</button>
       </form>
     </div>
-    <div id="list"></div>
+    <div class="with-side">
+      <div id="list"></div>
+      <aside>
+        <section class="side-card">
+          <p class="kicker">最近</p>
+          <div id="hot"></div>
+        </section>
+        <section class="side-card">
+          <p class="kicker">标签</p>
+          <div class="tags" id="cloud"></div>
+        </section>
+      </aside>
+    </div>
   </main>
   <footer class="page">Nivek</footer>
   <script src="/js/api.js"></script>
