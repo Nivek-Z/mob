@@ -78,4 +78,23 @@ describe('GitHub repository client', () => {
     const fetcher = vi.fn(async () => response({ type: 'file', sha, encoding: 'base64', content: '/w==' }));
     await expect(new GitHubClient(env(), fetcher as typeof fetch).readFile('content/posts/test.md')).rejects.toMatchObject({ code: 'GITHUB_INVALID_RESPONSE' });
   });
+  it('uses the global receiver and trims pasted credential whitespace', async () => {
+    const fetcher = vi.fn(async function (this: unknown, _input: RequestInfo | URL, init?: RequestInit) {
+      expect(this).toBe(globalThis);
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer TOP_SECRET');
+      return response({ object: { type: 'commit', sha } });
+    });
+    expect(await new GitHubClient(env({ GITHUB_TOKEN: '  TOP_SECRET\n' }), fetcher as typeof fetch).readHead()).toBe(sha);
+  });
+  it.each([
+    [new DOMException('TOP_SECRET timeout detail', 'TimeoutError'), 504, 'GITHUB_TIMEOUT'],
+    [new TypeError('Illegal invocation: TOP_SECRET'), 503, 'GITHUB_REQUEST_FAILED'],
+    [new TypeError('TOP_SECRET network detail'), 502, 'GITHUB_UNAVAILABLE'],
+  ])('classifies request failures and keeps exception details out of responses and logs', async (error, status, code) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetcher = vi.fn(async () => { throw error; });
+    await expect(new GitHubClient(env(), fetcher as typeof fetch).readHead()).rejects.toMatchObject({ status, code });
+    expect(JSON.stringify(log.mock.calls)).not.toContain('TOP_SECRET');
+    expect(log).toHaveBeenCalledOnce();
+  });
 });

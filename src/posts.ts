@@ -1,6 +1,6 @@
 import { parseDocument, stringify } from 'yaml';
 import { type Env, type Post, type PostMutation, type SavePostInput } from './types';
-import { GitHubClient, repositoryConfig, validSha } from './github';
+import { GitHubClient, GITHUB_BLOB_BATCH_SIZE, GITHUB_BLOB_BATCH_BYTES, repositoryConfig, validSha } from './github';
 import { ApiError, UUID_PATTERN } from './http';
 
 const MAX_MARKDOWN_BYTES = 512 * 1024;
@@ -135,10 +135,17 @@ export class GithubPosts {
       try { validateSlug(entry.path.slice(prefix.length, -3)); } catch { throw new ApiError(422, 'INVALID_POST_CONTENT', 'Article filenames must be valid slugs in the configured article directory.'); }
     }
     const posts: Post[] = []; let totalSourceBytes = 0;
-    // 500 articles need at most 25 GraphQL reads + HEAD + tree, within Workers Free's external subrequest limit.
-    // Batches run sequentially to keep memory and outgoing connections bounded.
-    for (let offset = 0; offset < entries.length; offset += 20) {
-      const batch = entries.slice(offset, offset + 20);
+    // Small articles still use batches of 20. At the maximum supported file size,
+    // at least 12 fit: 500 articles need at most 42 reads + HEAD + tree.
+    // Bound source bytes as well as count, since JSON can double the source size.
+    for (let offset = 0; offset < entries.length;) {
+      let end = offset; let batchBytes = 0;
+      while (end < entries.length && end - offset < GITHUB_BLOB_BATCH_SIZE) {
+        const size = entries[end].size ?? MAX_MARKDOWN_BYTES + 64 * 1024;
+        if (end > offset && batchBytes + size > GITHUB_BLOB_BATCH_BYTES) break;
+        batchBytes += size; end++;
+      }
+      const batch = entries.slice(offset, end); offset = end;
       const sources = await this.github.readBlobs(batch.map((entry) => entry.sha));
       for (const entry of batch) {
         const source = sources.get(entry.sha)!;
@@ -150,9 +157,10 @@ export class GithubPosts {
     posts.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.slug.localeCompare(b.slug));
     const envelope = { version: 1, namespace: this.namespace, head, savedAt: Date.now(), posts };
     let serializedBytes = encoder.encode(JSON.stringify({ ...envelope, posts: [] })).byteLength;
-    for (const post of posts) {
-      // Count JSON escapes before allocating a potentially large serialized index.
-      serializedBytes += encoder.encode(JSON.stringify({ ...post, markdown: '' })).byteLength + encoder.encode(post.markdown).byteLength + (post.markdown.match(/["\\\r\n\t]/g)?.length ?? 0) + 1;
+    for (const [index, post] of posts.entries()) {
+      // Serialize only one bounded article at a time. This counts every JSON
+      // escape, including tabs, before allocating the complete index.
+      serializedBytes += encoder.encode(JSON.stringify(post)).byteLength + (index > 0 ? 1 : 0);
       if (serializedBytes > MAX_INDEX_BYTES) throw new ApiError(502, 'POST_INDEX_TOO_LARGE', 'The serialized article index exceeds the supported size of 32 MiB.');
     }
     const serialized = JSON.stringify(envelope);

@@ -183,7 +183,11 @@ url 是写进正文的稳定 URL。key/owner 仅供后台元数据使用。列�
 | 415 | JSON_REQUIRED、UNSUPPORTED_MEDIA_TYPE | 修正 Content-Type/文件类型 |
 | 422 | MEDIA_NOT_READY、PRIVATE_PREVIEW_LINK、INVALID_MEDIA_URL、TOO_MANY_MEDIA_REFERENCES、INVALID_POST_CONTENT | 完成上传、使用完整稳定 URL，或减少媒体引用 |
 | 502 / 503 | GITHUB_UNAVAILABLE、GITHUB_ACCESS_DENIED、GITHUB_RATE_LIMITED、MEDIA_STORAGE_ERROR、COORDINATOR_NOT_CONFIGURED | 保留编辑内容稍后重试；管理端检查配置 |
+| 503 | GITHUB_REQUEST_FAILED | Worker 无法启动 GitHub 请求，查看运行日志与调用方式 |
+| 504 | GITHUB_TIMEOUT | GitHub 请求超时，保留内容后重试 |
 
 上游错误经过脱敏，不返回 PAT。GitHub 索引最多 500 篇，源文件总大小与序列化索引大小分别最多 32 MiB，超过返回 POST_INDEX_TOO_LARGE，不静默截断。公开仓库也需要 runtime GITHUB_TOKEN（GraphQL 批量读取不能匿名）。文章 PUT/DELETE、媒体 DELETE 由全局 SQLite Durable Object 协调，前端接口不变；缺绑定时返回 COORDINATOR_NOT_CONFIGURED。GET 健康检查通过不能证明外部服务或协调器可写。
+
+GraphQL 读取按文章数量和源文件字节数共同分批，给 JSON 转义预留空间。GitHub 请求失败日志只记录错误类别、HTTP 方法及上游状态码，不记录凭据、响应正文或原始异常消息。
 
 机器可读规范见 [openapi.yaml](openapi.yaml)。

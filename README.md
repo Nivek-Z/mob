@@ -37,6 +37,8 @@ npm ci
 npm run verify
 ```
 
+`npm test` 同时运行 Node 单元测试与 Cloudflare `workerd` 运行时集成测试。后者覆盖原生 fetch、Access JWT 验证、文章读写协调和 R2 单文件/分片上传；所有外部请求由本地测试替身处理，不使用生产凭据或操作线上文章。`npm run check && npm test` 可独立完成这些检查。
+
 本地调试把 `.dev.vars.example` 复制成 `.dev.vars`，填写本地开发令牌和 GitHub PAT，再运行：
 
 ```sh

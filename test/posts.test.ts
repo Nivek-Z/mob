@@ -8,7 +8,7 @@ function basePost(overrides: Partial<Post> = {}): Post {
 }
 function createInput(overrides: Partial<SavePostInput> = {}): SavePostInput { return { sha: null, title: '文章', markdown: '正文', status: 'draft', ...overrides }; }
 function response(data: unknown, status = 200): Response { return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } }); }
-function fixture() {
+function fixture(includeSizes = true) {
   const files = new Map<string, { sha: string; content: string }>();
   let revision = 1;
   const nextHead = () => { revision++; };
@@ -27,7 +27,7 @@ function fixture() {
       return response({ data: { repository } });
     }
     if (url.pathname.includes('/git/ref/heads/')) return response({ object: { type: 'commit', sha: revision.toString(16).padStart(40, '0') } });
-    if (url.pathname.includes('/git/trees/')) return response({ truncated: false, tree: Array.from(files, ([path, file]) => ({ path, type: 'blob', sha: file.sha })) });
+    if (url.pathname.includes('/git/trees/')) return response({ truncated: false, tree: Array.from(files, ([path, file]) => ({ path, type: 'blob', sha: file.sha, ...(includeSizes ? { size: Buffer.byteLength(file.content) } : {}) })) });
     if (url.pathname.includes('/git/blobs/')) { const file = [...files.values()].find((item) => item.sha === url.pathname.split('/').at(-1)); return file ? response({ encoding: 'base64', content: Buffer.from(file.content).toString('base64') }) : response({}, 404); }
     const path = decodeURIComponent(url.pathname.split('/contents/')[1]);
     const file = files.get(path);
@@ -130,8 +130,8 @@ describe('GitHub article operations', () => {
     await expect(new GithubPosts(f.env, fetcher as typeof fetch).listPosts()).rejects.toMatchObject({ code: 'POST_INDEX_TOO_LARGE' });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
-  it('batches 500 sources inside Workers Free subrequest limits and refuses excessive count', async () => {
-    const f = fixture(); let active = 0; let maximum = 0;
+  it.each([true, false])('batches 500 sources inside Workers Free subrequest limits with size metadata %s', async (includeSizes) => {
+    const f = fixture(includeSizes); let active = 0; let maximum = 0;
     for (let index = 0; index < 500; index++) f.files.set(`content/posts/post-${index}.md`, { sha: index.toString(16).padStart(40, '0'), content: serializePost(basePost({ slug: `post-${index}` })) });
     const realFetch = f.fetcher;
     const concurrentFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -141,9 +141,25 @@ describe('GitHub article operations', () => {
       try { return await realFetch(input, init); } finally { active--; }
     });
     expect(await new GithubPosts(f.env, concurrentFetch as typeof fetch).listPosts()).toHaveLength(500); expect(maximum).toBe(1);
-    expect(concurrentFetch.mock.calls.filter(([url]) => String(url).endsWith('/graphql'))).toHaveLength(25);
-    expect(concurrentFetch.mock.calls).toHaveLength(27);
+    expect(concurrentFetch.mock.calls.length).toBeLessThanOrEqual(includeSizes ? 27 : 46);
     for (let index = 500; index < 501; index++) f.files.set(`content/posts/post-${index}.md`, { sha: index.toString(16).padStart(40, '0'), content: '' });
     await expect(f.posts.listPosts(true)).rejects.toMatchObject({ code: 'POST_INDEX_TOO_LARGE' });
+  });
+  it('reads legal large articles even when JSON escaping expands the GraphQL response', async () => {
+    const f = fixture();
+    for (let index = 0; index < 19; index++) {
+      const content = serializePost(basePost({ markdown: '\t'.repeat(512 * 1024) }));
+      f.files.set(`content/posts/large-${index}.md`, { sha: index.toString(16).padStart(40, '0'), content });
+    }
+    expect(await f.posts.listPosts()).toHaveLength(19);
+  });
+  it('bounds the actual serialized index including escaped tabs before saving to R2', async () => {
+    const f = fixture();
+    for (let index = 0; index < 65; index++) {
+      const content = serializePost(basePost({ markdown: '\t'.repeat(256 * 1024) }));
+      f.files.set(`content/posts/large-${index}.md`, { sha: index.toString(16).padStart(40, '0'), content });
+    }
+    await expect(f.posts.listPosts()).rejects.toMatchObject({ code: 'POST_INDEX_TOO_LARGE' });
+    expect(f.media.put).not.toHaveBeenCalled();
   });
 });

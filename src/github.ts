@@ -2,6 +2,9 @@ import { type Env } from './types';
 import { ApiError } from './http';
 
 export const GITHUB_API_VERSION = '2022-11-28';
+export const GITHUB_BLOB_BATCH_SIZE = 20;
+// Reserve room for JSON escapes and GraphQL metadata within the 16 MiB response bound.
+export const GITHUB_BLOB_BATCH_BYTES = 7 * 1024 * 1024;
 const SHA_PATTERN = /^[a-f0-9]{40}$/i;
 export interface RepositoryFile { sha: string; content: string; }
 export interface TreeEntry { path: string; sha: string; size?: number; }
@@ -56,16 +59,31 @@ export class GitHubClient {
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': GITHUB_API_VERSION, 'User-Agent': 'mob-blog-worker',
     };
-    if (this.env.GITHUB_TOKEN?.trim()) headers.Authorization = `Bearer ${this.env.GITHUB_TOKEN}`;
+    if (this.env.GITHUB_TOKEN?.trim()) headers.Authorization = `Bearer ${this.env.GITHUB_TOKEN.trim()}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     let response: Response;
-    try { response = await this.fetcher(`${apiRoot ? 'https://api.github.com' : this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) }); }
-    catch { throw new ApiError(502, 'GITHUB_UNAVAILABLE', 'GitHub is temporarily unavailable.'); }
+    try {
+      // Workers native fetch rejects an unrelated receiver. Calling it as
+      // this.fetcher(...) would supply this GitHubClient as the receiver.
+      response = await this.fetcher.call(globalThis, `${apiRoot ? 'https://api.github.com' : this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+    } catch (error) {
+      const timeout = (error instanceof Error || error instanceof DOMException) && ['TimeoutError', 'AbortError'].includes(error.name);
+      const invocation = error instanceof Error && error.message.includes('Illegal invocation');
+      const code = timeout ? 'GITHUB_TIMEOUT' : invocation ? 'GITHUB_REQUEST_FAILED' : 'GITHUB_UNAVAILABLE';
+      // Never log headers, the token, upstream response bodies or raw exception messages.
+      console.error(JSON.stringify({ event: 'github_request_failed', code, method }));
+      if (timeout) throw new ApiError(504, code, 'The GitHub request timed out. Try again later.');
+      if (invocation) throw new ApiError(503, code, 'The Worker could not start the GitHub request. Check the runtime logs.');
+      throw new ApiError(502, code, 'GitHub is temporarily unavailable.');
+    }
     if (response.status === 429 || (response.status === 403 && (response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after')))) {
       throw new ApiError(503, 'GITHUB_RATE_LIMITED', 'GitHub rate limits have been reached. Try again later.');
     }
     if (response.status === 401 || response.status === 403) throw new ApiError(503, 'GITHUB_ACCESS_DENIED', 'The configured GitHub credential cannot access this repository.');
-    if (response.status >= 500) throw new ApiError(502, 'GITHUB_UNAVAILABLE', 'GitHub is temporarily unavailable.');
+    if (response.status >= 500) {
+      console.error(JSON.stringify({ event: 'github_upstream_error', method, status: response.status }));
+      throw new ApiError(502, 'GITHUB_UNAVAILABLE', 'GitHub is temporarily unavailable.');
+    }
     return response;
   }
   private async data(response: Response, maximumBytes = 4 * 1024 * 1024): Promise<Record<string, unknown>> {
@@ -127,7 +145,7 @@ export class GitHubClient {
     return base64Decode(data.content);
   }
   async readBlobs(shas: string[]): Promise<Map<string, string>> {
-    if (shas.length > 20 || !shas.every(validSha)) throw new ApiError(400, 'INVALID_SHA', 'Blob batches must contain at most 20 valid article SHAs.');
+    if (shas.length > GITHUB_BLOB_BATCH_SIZE || !shas.every(validSha)) throw new ApiError(400, 'INVALID_SHA', `Blob batches must contain at most ${GITHUB_BLOB_BATCH_SIZE} valid article SHAs.`);
     if (!shas.length) return new Map();
     if (!this.env.GITHUB_TOKEN?.trim()) throw new ApiError(503, 'GITHUB_NOT_CONFIGURED', 'GitHub authentication is required for batched article reads.');
     const definitions = shas.map((_, index) => `$s${index}: GitObjectID!`).join(', ');
