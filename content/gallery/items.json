@@ -1,3 +1,19 @@
 {
-  "items": []
+  "items": [
+    {
+      "id": "2fc72121-2c93-4882-b0c0-7135269d501c",
+      "filename": "wallhaven-5gyjw3.jpg",
+      "url": "https://blog2.nivekz.org/media/2fc72121-2c93-4882-b0c0-7135269d501c/wallhaven-5gyjw3.jpg",
+      "contentType": "image/jpeg",
+      "size": 374857,
+      "createdAt": "2026-10-03T09:46:11.953Z",
+      "title": "wallhaven-5gyjw3.jpg",
+      "description": "",
+      "categoryId": "gallery",
+      "tags": [],
+      "isPublic": false,
+      "isListed": false,
+      "source": "theme"
+    }
+  ]
 }
