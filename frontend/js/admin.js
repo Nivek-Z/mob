@@ -18,6 +18,8 @@
   let currentSha = null;
   let mediaIds = [];
   let editing = "";
+  let uploading = 0;
+  let saving = false;
   const escapeHtml = window.Mob.escapeHtml;
   const types = {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
@@ -32,7 +34,15 @@
     const text = fields.markdown.value.replace(/https?:\/\/[^)\s]+\/media\/([0-9a-f-]{36})\/[^)\s]+/gi, "/api/admin/media/$1/file");
     preview.innerHTML = window.Mob.renderMarkdown(text);
     const cover = fields.cover.value.trim();
-    if (cover) preview.insertAdjacentHTML("afterbegin", '<img class="cover" alt="" src="' + escapeHtml(cover.indexOf("/media/") >= 0 ? cover.replace(/https?:\/\/[^/]+\/media\/([0-9a-f-]{36})\/[^?\s]+/i, "/api/admin/media/$1/file") : cover) + '">');
+    const previewCover = window.Mob.safeUrl(cover.indexOf("/media/") >= 0 ? cover.replace(/https?:\/\/[^/]+\/media\/([0-9a-f-]{36})\/[^?\s]+/i, "/api/admin/media/$1/file") : cover);
+    if (previewCover) {
+      const image = document.createElement("img"); image.className = "cover"; image.alt = "封面预览"; image.src = previewCover;
+      preview.prepend(image);
+    }
+  }
+  function syncActions() {
+    form.querySelectorAll("button").forEach(function (button) { button.disabled = saving || uploading > 0; });
+    file.disabled = saving || uploading > 0;
   }
   function collectIds() {
     const found = (fields.markdown.value + "\n" + fields.cover.value).match(/\/media\/([0-9a-f-]{36})\//gi) || [];
@@ -108,14 +118,19 @@
   file.addEventListener("change", function () {
     const chosen = file.files && file.files[0];
     file.value = "";
-    if (chosen) upload(chosen).catch(function (error) { say(error.message, true); });
+    if (chosen) {
+      uploading += 1; syncActions();
+      upload(chosen).catch(function (error) { say(error.message, true); }).finally(function () { uploading -= 1; syncActions(); });
+    }
   });
   form.addEventListener("submit", function (event) {
     event.preventDefault();
+    if (uploading || saving) { say("请等待当前上传或保存完成。"); return; }
     const status = event.submitter && event.submitter.dataset.status || "draft";
     const slug = fields.slug.value.trim();
     const tags = fields.tags.value.split(/[,，]/).map(function (item) { return item.trim(); }).filter(Boolean);
     say("正在保存…");
+    saving = true; syncActions();
     window.Mob.api("/api/admin/posts/" + encodeURIComponent(slug), {
       method: "PUT",
       json: {
@@ -133,12 +148,13 @@
       editing = result.post.slug;
       fields.slug.readOnly = true;
       remove.hidden = false;
+      document.getElementById("mode").textContent = result.post.status === "published" ? "已发布" : "草稿";
       say(status === "published" ? "已发布。" : "草稿已保存。");
       history.replaceState(null, "", "/admin/?slug=" + encodeURIComponent(result.post.slug));
       return loadList();
     }).catch(function (error) {
       say(error.code === "POST_CONFLICT" ? "文章已被改过。重新打开后再保存，当前内容先留在页面上。" : error.message, true);
-    });
+    }).finally(function () { saving = false; syncActions(); });
   });
   remove.addEventListener("click", function () {
     if (!editing || !confirm("删除这篇文章？图片不会一起删除。")) return;
