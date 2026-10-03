@@ -46,6 +46,8 @@ npm run verify
 
 `npm test` 同时运行 Node 单元测试与 Cloudflare `workerd` 运行时集成测试。后者覆盖原生 fetch、Access JWT 验证、文章读写协调、R2 单文件/分片/音频上传、图库公开与删除保护、主题切换、Schema及配置原子提交；所有外部请求由本地测试替身处理，不使用生产凭据或操作线上文章。`npm run check && npm test && npm run build` 可完成本地检查、主题声明验证与静态构建。
 
+运行时测试立即读完响应体，避免未消费的流阻塞 Miniflare 清理；配置开启对应 SDK 检查。清理 hook 单独保留 30 秒上限，必须等待 dispose 完成，失败仍阻止构建。测试守则见 [test/AGENTS.md](test/AGENTS.md)。
+
 本地调试把 `.dev.vars.example` 复制成 `.dev.vars`，填写本地开发令牌和 GitHub PAT，再运行：
 
 ```sh

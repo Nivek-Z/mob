@@ -39,8 +39,15 @@ function storePost(slug: string, status: 'draft' | 'published') {
 function upstream(data: unknown, status = 200, headers: Record<string, string> = {}) {
   return new RuntimeResponse(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 }
+async function dispatchRequest(...args: Parameters<Miniflare['dispatchFetch']>) {
+  const response = await mf.dispatchFetch(...args);
+  // Even status-only assertions must finish the network response, otherwise
+  // Miniflare's dispatcher can wait on unread streams during dispose().
+  const body = response.body === null ? null : await response.arrayBuffer();
+  return new RuntimeResponse(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
 function request(path: string, method = 'GET', body?: unknown, admin = false, headers: Record<string, string> = {}) {
-  return mf.dispatchFetch(origin + path, {
+  return dispatchRequest(origin + path, {
     method,
     headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(admin ? { 'cf-access-jwt-assertion': jwt, Origin: origin } : {}), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -138,7 +145,9 @@ beforeEach(() => {
     for (const page of Object.values(definition.routes) as string[]) storeFile(`frontend/themes/${theme}/${page}`, readFileSync(`frontend/themes/${theme}/${page}`, 'utf8'));
   }
 });
-afterAll(async () => { await mf?.dispose(); });
+// Cloudflare's shared build hosts may need longer to reap workerd and close
+// its storage/proxy resources. Await real cleanup; never suppress its errors.
+afterAll(async () => { await mf?.dispose(); }, 30000);
 
 describe('Cloudflare runtime integration', () => {
   it('checks liveness without depending on GitHub', async () => {
@@ -188,7 +197,7 @@ describe('Cloudflare runtime integration', () => {
   it('uploads and reads published media with native R2 and range responses', async () => {
     const bytes = new Uint8Array(32); bytes.set([137, 80, 78, 71, 13, 10, 26, 10]); bytes.set(Buffer.from('IHDR'), 12);
     const session = (await data(await request('/api/admin/uploads', 'POST', { filename: 'photo.png', contentType: 'image/png', size: bytes.length }, true))).data;
-    const uploaded = await mf.dispatchFetch(origin + `/api/admin/uploads/${session.id}/body`, { method: 'PUT', body: bytes, headers: { Origin: origin, 'cf-access-jwt-assertion': jwt } });
+    const uploaded = await dispatchRequest(origin + `/api/admin/uploads/${session.id}/body`, { method: 'PUT', body: bytes, headers: { Origin: origin, 'cf-access-jwt-assertion': jwt } });
     expect(uploaded.status).toBe(200);
     const path = new URL(session.url).pathname;
     expect((await request(path)).status).toBe(404);
@@ -204,7 +213,7 @@ describe('Cloudflare runtime integration', () => {
     const bytes = new Uint8Array(partSize + 32); bytes.set([0, 0, 0, 16]); bytes.set(Buffer.from('ftypisom'), 4);
     const session = (await data(await request('/api/admin/uploads', 'POST', { filename: 'video.mp4', contentType: 'video/mp4', size: bytes.length }, true))).data;
     for (let number = 1; number <= 2; number++) {
-      const response = await mf.dispatchFetch(origin + `/api/admin/uploads/${session.id}/parts/${number}`, {
+      const response = await dispatchRequest(origin + `/api/admin/uploads/${session.id}/parts/${number}`, {
         method: 'PUT', body: bytes.slice((number - 1) * partSize, number * partSize), headers: { Origin: origin, 'cf-access-jwt-assertion': jwt },
       });
       expect(response.status).toBe(200);
@@ -221,7 +230,7 @@ async function uploadFixture(filename = 'photo.png', contentType = 'image/png') 
   if (contentType === 'image/png') { bytes.set([137,80,78,71,13,10,26,10]); bytes.set(Buffer.from('IHDR'),12); }
   else bytes.set(Buffer.from('ID3'), 0);
   const session = (await data(await request('/api/admin/uploads', 'POST', { filename, contentType, size: bytes.length }, true))).data;
-  const response = await mf.dispatchFetch(origin + `/api/admin/uploads/${session.id}/body`, { method: 'PUT', body: bytes, headers: { Origin: origin, 'cf-access-jwt-assertion': jwt } });
+  const response = await dispatchRequest(origin + `/api/admin/uploads/${session.id}/body`, { method: 'PUT', body: bytes, headers: { Origin: origin, 'cf-access-jwt-assertion': jwt } });
   expect(response.status).toBe(200); return (await data(response)).data;
 }
 describe('platform integration in workerd', () => {
