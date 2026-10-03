@@ -49,7 +49,8 @@
   const scenes = Array.from(document.querySelectorAll(".story-scene"));
   const sceneButtons = Array.from(document.querySelectorAll("[data-scene]"));
   const counter = document.querySelector(".story-counter");
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const reduced = { get matches() { return preference.matches || window.Mob.themeConfig?.motion.enabled === false; }, addEventListener: function (_, listener) { preference.addEventListener('change', listener); document.addEventListener('mob:theme-config', listener); } };
   document.documentElement.classList.toggle("home-enhanced", !reduced.matches);
   const desktop = window.matchMedia("(min-width: 769px)");
   const clamp = function (value) { return Math.max(0, Math.min(1, value)); };
@@ -178,7 +179,7 @@
     rainFrame = requestAnimationFrame(rain);
   }
   function rainVisible() {
-    return context && !reduced.matches && desktop.matches && !document.hidden && heroProgress > .63 && measurements.hero && window.scrollY < measurements.hero.top + hero.offsetHeight;
+    return context && window.Mob.themeConfig?.motion.rain !== false && !reduced.matches && desktop.matches && !document.hidden && heroProgress > .63 && measurements.hero && window.scrollY < measurements.hero.top + hero.offsetHeight;
   }
   function syncRain() {
     if (rainVisible()) { if (!rainFrame) { lastRain = performance.now(); rainFrame = requestAnimationFrame(rain); } }
@@ -206,7 +207,7 @@
     button.addEventListener("click", function () {
       dialogueOpener = button;
       dialogue.hidden = false;
-      typeLine("欢迎来到 Nivek 的小屋。代码、笔记、日常，都放在这里。想先看看什么？");
+      typeLine(window.Mob.themeConfig?.dialogue.welcome || "欢迎来到我的小屋。想先看看什么？");
       document.querySelector("[data-dialogue-close]").focus({ preventScroll: true });
     });
   });
@@ -224,7 +225,8 @@
   };
   document.querySelectorAll("[data-topic]").forEach(function (button) {
     button.addEventListener("click", function () {
-      const topic = topics[button.dataset.topic];
+      const topic = (window.Mob.themeConfig?.dialogue.topics || topics)[button.dataset.topic];
+      if (button.dataset.topic === 'contact' && window.Mob.site?.socials[0]) { const link = window.Mob.site.socials[0]; topic[1] = link.url; topic[2] = link.label + ' ↗'; }
       typeLine(topic[0]);
       dialogueLink.href = topic[1];
       dialogueLink.textContent = topic[2];
@@ -232,7 +234,8 @@
       if (topic[1].startsWith("https:")) dialogueLink.target = "_blank"; else dialogueLink.removeAttribute("target");
     });
   });
-  const wishes = ["一直有星光", "岁岁皆欢愉", "所念皆星河", "热爱不打烊"];
+  let wishes = ["一直有星光", "岁岁皆欢愉", "所念皆星河", "热爱不打烊"];
+  document.addEventListener('mob:theme-config', event => { wishes = event.detail.journey.wishes; });
   let wishIndex = 0;
   const wishNode = document.querySelector(".wish");
   const wishTimer = setInterval(function () {

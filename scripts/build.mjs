@@ -27,7 +27,7 @@ async function assertPlainPath(filename, parent) {
   }
 }
 function excluded(name) {
-  return name.startsWith('.') || name.toLowerCase() === 'node_modules' || /^readme(?:\..*)?$/i.test(name);
+  return name.startsWith('.') || name.toLowerCase() === 'node_modules' || /^(?:readme|agents)(?:\..*)?$/i.test(name);
 }
 async function copyTree(source, destination) {
   let count = 0;
@@ -114,6 +114,49 @@ if (mode === 'build' || (mode === 'auto' && packageStat)) {
   await runCommand(command(config.frontend.buildCommand, 'frontend.buildCommand'), 'Frontend build');
   await assertPlainPath(source, root);
   if (!(await info(source))?.isDirectory()) throw new Error('Frontend build did not create ' + source);
+}
+
+// Theme source/output declares only static routes and bounded editable files.
+const themeRegistrationPath = path.join(source, 'themes.json');
+if ((await info(themeRegistrationPath))?.isFile()) {
+  const registration = JSON.parse(await readFile(themeRegistrationPath, 'utf8'));
+  const safe = value => typeof value === 'string' && value.split('/').every(part => /^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$/.test(part) && !['.', '..'].includes(part));
+  if (registration.schemaVersion !== 1 || typeof registration.allowVisitorSwitch !== 'boolean' || !Array.isArray(registration.themes) || !registration.themes.length || registration.themes.length > 8 || !registration.themes.some(theme => theme.id === registration.defaultTheme && theme.enabled)) throw new Error('Invalid theme registry or default theme.');
+  const ids = new Set(); let configCount = 0;
+  for (const theme of registration.themes) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(theme.id) || ids.has(theme.id) || theme.root !== 'themes/' + theme.id || typeof theme.enabled !== 'boolean') throw new Error('Invalid or duplicate theme.');
+    ids.add(theme.id); const themeRoot = path.join(source, theme.root);
+    await assertPlainPath(themeRoot, source);
+    const definitionPath = path.join(themeRoot, 'theme.json'); await assertPlainPath(definitionPath, source);
+    const declaration = JSON.parse(await readFile(definitionPath, 'utf8'));
+    if (declaration.schemaVersion !== 1 || declaration.id !== theme.id || !declaration.routes?.['/'] || !declaration.routes?.['/admin/'] || !Array.isArray(declaration.configs) || declaration.configs.length > 8) throw new Error('Missing home, admin or config declaration for ' + theme.id);
+    for (const [route, targetPath] of Object.entries(declaration.routes)) {
+      if (!/^\/(?:[a-zA-Z0-9_.-]+\/)*[a-zA-Z0-9_.-]*$/.test(route) || route.split('/').some(part => ['.', '..'].includes(part)) || /^\/(api|media|themes|theme-media)(\/|$)/.test(route) || !safe(targetPath) || !targetPath.endsWith('.html') || /^\/admin(?:\/|$)/.test(route) !== targetPath.startsWith('admin/')) throw new Error('Unsafe theme route: ' + route);
+      const filename = path.join(themeRoot, targetPath); await assertPlainPath(filename, source);
+      if (!(await info(filename))?.isFile()) throw new Error('Missing theme route asset: ' + targetPath);
+    }
+    const configIds = new Set(); const configPaths = new Set();
+    for (const document of declaration.configs) {
+      configCount++;
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(document.id) || configIds.has(document.id) || configPaths.has(document.path) || !safe(document.path) || !/^config\/.+\.json$/.test(document.path) || /\.(default|schema|references)\.json$/.test(document.path)) throw new Error('Unsafe or duplicate theme config.');
+      configIds.add(document.id); configPaths.add(document.path);
+      for (const relative of [document.path, document.defaultPath, document.schemaPath].filter(Boolean)) {
+        if (!safe(relative) || !relative.startsWith('config/') || !relative.endsWith('.json')) throw new Error('Unsafe theme default or schema.');
+        const filename = path.join(themeRoot, relative); await assertPlainPath(filename, source);
+        if (relative === document.path && !(await info(filename)) && document.defaultPath) continue;
+        const bytes = await readFile(filename); if (bytes.length > 512 * 1024) throw new Error('Theme configuration exceeds 512 KiB.'); JSON.parse(bytes.toString('utf8'));
+      }
+    }
+    for (const document of declaration.configs) if (configPaths.has(document.defaultPath) || configPaths.has(document.schemaPath)) throw new Error('An editable config overlaps its defaults or schema.');
+    for (const media of declaration.bundledMedia || []) {
+      if (!safe(media.path) || !media.path.startsWith('assets/images/') || !/^[a-f0-9]{64}$/.test(media.sha256)) throw new Error('Invalid bundled media seed.');
+      await assertPlainPath(path.join(themeRoot, media.path), source);
+      const bytes = await readFile(path.join(themeRoot, media.path));
+      const { createHash } = await import('node:crypto');
+      if (bytes.length > 16 * 1024 * 1024 || createHash('sha256').update(bytes).digest('hex') !== media.sha256) throw new Error('Theme media seed digest mismatch.');
+    }
+  }
+  if (configCount > 31) throw new Error('Declare at most 31 theme config documents across installed themes.');
 }
 
 if (target !== path.resolve(root, 'dist', 'client') || !inside(dist, target)) throw new Error('Unsafe output directory.');

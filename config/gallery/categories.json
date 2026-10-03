@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "id": "article-images",
+      "name": "文章插图"
+    },
+    {
+      "id": "gallery",
+      "name": "日常影像"
+    }
+  ]
+}

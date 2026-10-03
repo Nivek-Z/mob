@@ -102,8 +102,8 @@ export class GitHubClient {
       return record(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
     } catch { throw upstreamError(); } finally { reader.releaseLock(); }
   }
-  async readFile(path: string): Promise<RepositoryFile | null> {
-    const response = await this.request(`/contents/${encodePath(path)}?ref=${encodeURIComponent(this.config.branch)}`);
+  async readFile(path: string, ref = this.config.branch): Promise<RepositoryFile | null> {
+    const response = await this.request(`/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`);
     if (response.status === 404) return null;
     if (!response.ok) throw upstreamError();
     const data = await this.data(response);
@@ -188,5 +188,39 @@ export class GitHubClient {
     const commit = record((await this.data(response)).commit);
     if (!validSha(commit.sha)) throw upstreamError();
     return { commitSha: commit.sha };
+  }
+  /** Commit related JSON documents together, never exposing half-written references. */
+  async writeFiles(files: { path: string; content: string | null; sha: string | null }[], message: string): Promise<{ commitSha: string; shas: Record<string, string> }> {
+    if (!files.length || new Set(files.map(file => file.path)).size !== files.length || files.some(file => file.sha !== null && !validSha(file.sha))) throw new ApiError(400, 'INVALID_SHA', 'Supply unique paths and their current SHAs.');
+    const head = await this.readHead();
+    if (!head) throw new ApiError(503, 'GITHUB_REPOSITORY_UNAVAILABLE', 'Initialize the repository before saving settings.');
+    const entries = await this.readTree(head);
+    for (const file of files) {
+      if ((entries.find(entry => entry.path === file.path)?.sha ?? null) !== file.sha) throw new ApiError(409, 'CONFIG_CONFLICT', 'The document changed. Reload before saving; keep your unsaved edits.');
+    }
+    const commitResponse = await this.request(`/git/commits/${head}`);
+    if (!commitResponse.ok) throw upstreamError();
+    const baseTree = record((await this.data(commitResponse)).tree).sha;
+    if (!validSha(baseTree)) throw upstreamError();
+    const treeResponse = await this.request('/git/trees', 'POST', { base_tree: baseTree, tree: files.map(file => ({ path: file.path, mode: '100644', type: 'blob', ...(file.content === null ? { sha: null } : { content: file.content }) })) });
+    if (!treeResponse.ok) throw upstreamError();
+    const treeSha = (await this.data(treeResponse)).sha;
+    if (!validSha(treeSha)) throw upstreamError();
+    const created = await this.request('/git/commits', 'POST', { message, tree: treeSha, parents: [head] });
+    if (!created.ok) throw upstreamError();
+    const commitSha = (await this.data(created)).sha;
+    if (!validSha(commitSha)) throw upstreamError();
+    const updated = await this.request(`/git/refs/heads/${encodePath(this.config.branch)}`, 'PATCH', { sha: commitSha, force: false });
+    if ([409, 422].includes(updated.status)) throw new ApiError(409, 'CONFIG_CONFLICT', 'The repository changed during saving. Reload before retrying; keep your edits.');
+    if (!updated.ok) throw upstreamError();
+    const shas: Record<string, string> = {};
+    for (const file of files) {
+      if (file.content === null) continue;
+      const body = new TextEncoder().encode(file.content);
+      const prefix = new TextEncoder().encode(`blob ${body.byteLength}\0`);
+      const bytes = new Uint8Array(prefix.length + body.length); bytes.set(prefix); bytes.set(body, prefix.length);
+      shas[file.path] = [...new Uint8Array(await crypto.subtle.digest('SHA-1', bytes))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+    return { commitSha, shas };
   }
 }

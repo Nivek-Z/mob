@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/index';
+import type { SettingsService } from '../src/settings';
+import type { GalleryService } from '../src/gallery';
 import { ApiError } from '../src/http';
 import type { Env, Post } from '../src/types';
 import type { GithubPosts } from '../src/posts';
@@ -22,7 +24,7 @@ function setup(items: Post[] = [post('public', 'published'), post('private', 'dr
     deleteMedia: vi.fn(async () => {}),
   };
   const authenticate = vi.fn(async () => ({ email: 'owner@example.com', subject: 'owner-id' }));
-  return { app: createApp({ posts: () => posts as unknown as GithubPosts, media: () => media as unknown as MediaService, authenticate }, { coordinateMutations: false }), posts, media, authenticate };
+  return { app: createApp({ settings: () => ({ usage: async () => [] }) as unknown as SettingsService, gallery: () => ({ grants: async () => false, document: async () => ({ items: [] }) }) as unknown as GalleryService, posts: () => posts as unknown as GithubPosts, media: () => media as unknown as MediaService, authenticate }, { coordinateMutations: false }), posts, media, authenticate };
 }
 function req(path: string, method = 'GET', body?: unknown, headers: Record<string, string> = {}) {
   return new Request(origin + path, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });

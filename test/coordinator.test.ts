@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BlogMutations } from '../src/coordinator';
 import { createApp } from '../src/index';
+import type { SettingsService } from '../src/settings';
+import type { GalleryService } from '../src/gallery';
 import type { GithubPosts } from '../src/posts';
 import { MediaService } from '../src/media';
 import type { Env, Identity, Post, SavePostInput } from '../src/types';
@@ -74,7 +76,7 @@ async function fixture() {
       return { post, commitSha: 'b'.repeat(40) };
     },
   };
-  const app = createApp({ posts: () => repository as unknown as GithubPosts, media: () => media, authenticate: async () => admin }, { coordinateMutations: false });
+  const app = createApp({ settings: () => ({ usage: async () => [] }) as unknown as SettingsService, gallery: () => ({ grants: async () => false, document: async () => ({ items: [] }) }) as unknown as GalleryService, posts: () => repository as unknown as GithubPosts, media: () => media, authenticate: async () => admin }, { coordinateMutations: false });
   const coordinator = new BlogMutations(state, env, (request, environment) => app.fetch(request, environment));
   const save = () => coordinator.fetch(writeRequest('/api/admin/posts/hello', 'PUT', { sha: null, title: 'Hello', markdown: `![Photo](${record.url})`, status: 'published' }));
   const remove = () => coordinator.fetch(writeRequest(`/api/admin/media/${record.id}`, 'DELETE'));

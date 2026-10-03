@@ -20,6 +20,7 @@
   let editing = "";
   let uploading = 0;
   let saving = false;
+  let dirty = false;
   const escapeHtml = window.Mob.escapeHtml;
   const types = {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
@@ -41,12 +42,12 @@
     }
   }
   function syncActions() {
-    form.querySelectorAll("button").forEach(function (button) { button.disabled = saving || uploading > 0; });
+    form.querySelectorAll(".actions button").forEach(function (button) { button.disabled = saving || uploading > 0; });
     file.disabled = saving || uploading > 0;
   }
   function collectIds() {
     const found = (fields.markdown.value + "\n" + fields.cover.value).match(/\/media\/([0-9a-f-]{36})\//gi) || [];
-    const ids = mediaIds.slice();
+    const ids = [];
     found.forEach(function (item) {
       const id = item.split("/")[2];
       if (ids.indexOf(id) < 0) ids.push(id);
@@ -81,48 +82,32 @@
     if (!slug) { fill(null); return; }
     fill(await window.Mob.api("/api/admin/posts/" + encodeURIComponent(slug)));
   }
-  async function upload(blob) {
-    const name = blob.name || "image";
-    const ext = (name.split(".").pop() || "").toLowerCase();
-    const contentType = types[ext] || blob.type;
-    if (!contentType || !Object.values(types).includes(contentType)) throw new Error("只支持 jpeg、png、gif、webp、avif、mp4、webm。");
-    say("正在上传…");
-    const session = await window.Mob.api("/api/admin/uploads", {
-      method: "POST",
-      json: { filename: name, contentType: contentType, size: blob.size }
-    });
-    const base = "/api/admin/uploads/" + encodeURIComponent(session.id);
-    let record;
-    if (session.mode === "single") {
-      record = await window.Mob.api(base + "/body", { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: blob });
-    } else {
-      for (let number = 1; number <= session.partCount; number += 1) {
-        const start = (number - 1) * session.partSize;
-        const end = Math.min(start + session.partSize, blob.size);
-        await window.Mob.api(base + "/parts/" + number, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: blob.slice(start, end) });
+  function enqueue(files) {
+    files.forEach(function (blob) {
+      const row = document.createElement('div'); row.className = 'upload-row';
+      const label = document.createElement('span'); const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试'; retry.hidden = true;
+      row.append(label, retry); document.getElementById('upload-queue').append(row);
+      const run = window.Mob.uploadTask(blob, 'editor', function (percent, stage) { label.textContent = blob.name + ' · ' + stage + ' ' + percent + '%'; });
+      async function attempt() {
+        retry.hidden = true; uploading++; syncActions();
+        try {
+          const record = await run();
+          const markdown = (record.contentType.startsWith('image/') ? '![' : '[') + record.filename + '](' + record.url + ')';
+          const box = fields.markdown; const at = box.selectionStart;
+          box.setRangeText(markdown, at, box.selectionEnd, 'end');
+          if (!fields.cover.value && record.contentType.startsWith('image/')) fields.cover.value = record.url;
+          renderPreview(); dirty = true; label.textContent = record.filename + ' · 已插入文章插图';
+        } catch (error) { label.textContent = blob.name + ' · ' + error.message; retry.hidden = false; }
+        finally { uploading--; syncActions(); }
       }
-      record = await window.Mob.api(base + "/complete", { method: "POST", json: {} });
-    }
-    if (mediaIds.indexOf(record.id) < 0) mediaIds.push(record.id);
-    const markdown = (contentType.indexOf("video/") === 0 ? "[" + record.filename + "](" : "![" + record.filename + "](") + record.url + ")";
-    const box = fields.markdown;
-    const at = box.selectionStart;
-    box.value = box.value.slice(0, at) + markdown + box.value.slice(box.selectionEnd);
-    if (!fields.cover.value && contentType.indexOf("image/") === 0) fields.cover.value = record.url;
-    renderPreview();
-    say("已插入 " + record.filename);
+      retry.addEventListener('click', attempt); attempt();
+    });
   }
-
-  fields.markdown.addEventListener("input", renderPreview);
-  fields.cover.addEventListener("input", renderPreview);
-  file.addEventListener("change", function () {
-    const chosen = file.files && file.files[0];
-    file.value = "";
-    if (chosen) {
-      uploading += 1; syncActions();
-      upload(chosen).catch(function (error) { say(error.message, true); }).finally(function () { uploading -= 1; syncActions(); });
-    }
-  });
+  const queue = document.createElement('div'); queue.id = 'upload-queue'; file.closest('.editor-toolbar').after(queue);
+  window.Mob.bindDrops(fields.markdown, enqueue);
+  fields.markdown.addEventListener('input', renderPreview);
+  fields.cover.addEventListener('input', renderPreview);
+  file.addEventListener('change', function () { enqueue(Array.from(file.files || [])); file.value = ''; });
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     if (uploading || saving) { say("请等待当前上传或保存完成。"); return; }
@@ -144,6 +129,7 @@
         mediaIds: collectIds()
       }
     }).then(function (result) {
+      dirty = false;
       currentSha = result.post.sha;
       editing = result.post.slug;
       fields.slug.readOnly = true;
@@ -166,6 +152,8 @@
     }).catch(function (error) { say(error.message, true); });
   });
 
+  form.addEventListener('input', () => { dirty = true; });
+  window.addEventListener('beforeunload', event => { if (dirty || uploading) { event.preventDefault(); event.returnValue = ''; } });
   window.Mob.api("/api/admin/session").then(function (session) {
     who.textContent = session.email;
     return loadList().then(openRequested);

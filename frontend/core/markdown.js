@@ -30,9 +30,10 @@
       link.href = href;
       if (!raw.startsWith("#")) {
         const url = new URL(href);
+        const isAudio = /\.(mp3|wav|ogg|m4a)$/i.test(url.pathname) || (/^\/api\/admin\/media\/[^/]+\/file$/.test(url.pathname) && /\.(mp3|wav|ogg|m4a)$/i.test(link.textContent));
         const isVideo = /\.(mp4|webm)$/i.test(url.pathname) || (/^\/api\/admin\/media\/[^/]+\/file$/.test(url.pathname) && /\.(mp4|webm)$/i.test(link.textContent));
-        if (url.origin === location.origin && /^\/(?:media\/|api\/admin\/media\/)/.test(url.pathname) && isVideo) {
-          const video = document.createElement("video");
+        if (url.origin === location.origin && /^\/(?:media\/|api\/admin\/media\/)/.test(url.pathname) && (isVideo || isAudio)) {
+          const video = document.createElement(isAudio ? "audio" : "video");
           video.src = href; video.controls = true; video.preload = "metadata";
           video.setAttribute("playsinline", "");
           video.setAttribute("aria-label", link.textContent || "文章视频");

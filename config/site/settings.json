@@ -1,0 +1,42 @@
+{
+  "title": "NIVEK 的博客",
+  "description": "Nivek 的个人空间，记录代码、学习与日常。",
+  "profile": {
+    "name": "Nivek",
+    "bio": "留一点空间，给热爱与好奇。",
+    "avatar": "/theme-media/firefly/character.avif"
+  },
+  "socials": [
+    {
+      "label": "GitHub",
+      "url": "https://github.com/Nivek-Z"
+    }
+  ],
+  "friends": [],
+  "navigation": [
+    {
+      "label": "主页",
+      "url": "/"
+    },
+    {
+      "label": "文章",
+      "url": "/archive.html"
+    },
+    {
+      "label": "标签",
+      "url": "/tags.html"
+    },
+    {
+      "label": "图库",
+      "url": "/gallery.html"
+    },
+    {
+      "label": "关于",
+      "url": "/about.html"
+    },
+    {
+      "label": "管理",
+      "url": "/admin/"
+    }
+  ]
+}

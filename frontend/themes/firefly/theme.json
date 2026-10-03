@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "id": "firefly",
+  "routes": {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/archive.html": "archive.html",
+    "/tags.html": "tags.html",
+    "/post.html": "post.html",
+    "/about.html": "about.html",
+    "/gallery.html": "gallery.html",
+    "/admin/": "admin/index.html",
+    "/admin/index.html": "admin/index.html",
+    "/admin/gallery.html": "admin/gallery.html",
+    "/admin/settings.html": "admin/settings.html",
+    "/404.html": "404.html"
+  },
+  "configs": [
+    {
+      "id": "appearance",
+      "label": "小屋展示",
+      "path": "config/appearance.json",
+      "schemaPath": "config/appearance.schema.json"
+    }
+  ],
+  "bundledMedia": [
+    {
+      "filename": "card-archive.avif",
+      "path": "assets/images/card-archive.avif",
+      "sha256": "2d269b29822bbc55d57ed8c7658c4277befcd6ea14665ff6b4efdc8a35ebf867",
+      "contentType": "image/avif"
+    },
+    {
+      "filename": "card-contact.avif",
+      "path": "assets/images/card-contact.avif",
+      "sha256": "7d4e4bd7583d367d30be6cf316a3ee068302afddf015d376e3183f46507e8f06",
+      "contentType": "image/avif"
+    },
+    {
+      "filename": "card-notes.avif",
+      "path": "assets/images/card-notes.avif",
+      "sha256": "364032929cb3ea4d5a62d2ac30ccfcac8840cf81fc9e5c3e76cd5c31eb7f501b",
+      "contentType": "image/avif"
+    },
+    {
+      "filename": "character.avif",
+      "path": "assets/images/character.avif",
+      "sha256": "fea565290af0429c270ab25d84fc9ac6341480d7121e100896f1088ca279a7e1",
+      "contentType": "image/avif"
+    },
+    {
+      "filename": "foreground.webp",
+      "path": "assets/images/foreground.webp",
+      "sha256": "488d059ca22e565145209c5bb1faf51001a5395161e810d20f696c200bdc91b9",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "hero.avif",
+      "path": "assets/images/hero.avif",
+      "sha256": "5b30132be3200bdbb89d4f2f6e4785b23317d184924a8bcc7bfa4debb55789b1",
+      "contentType": "image/avif"
+    },
+    {
+      "filename": "scene-1.webp",
+      "path": "assets/images/scene-1.webp",
+      "sha256": "da8e7c57ab40d559b9d3e01ba5c23513060db594690419f4f71079d776e704ee",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "scene-2.webp",
+      "path": "assets/images/scene-2.webp",
+      "sha256": "32172f28b14b3d380e7c7e8505cedae8983f1f2a7847b932a84df78dec70eae5",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "scene-3.webp",
+      "path": "assets/images/scene-3.webp",
+      "sha256": "f2ef6d5f6e0b978f7c5bc35af1135e3a02a8e8f055005428c505ae792d88743c",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "scene-4.webp",
+      "path": "assets/images/scene-4.webp",
+      "sha256": "5c3965ae9aa149115b0df2689cae00938f4ebf3d127f5b42542939657e8aaada",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "scene-5.webp",
+      "path": "assets/images/scene-5.webp",
+      "sha256": "14abdcbf31f40642c2f85b7e47e80e3db0ace66f326a538158643ad9dad232bb",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "scene-cycle.webp",
+      "path": "assets/images/scene-cycle.webp",
+      "sha256": "7ffb8d4c9e8b975e4e2d38119068bcfc26c272c1f019ab7f2e23b711504b6605",
+      "contentType": "image/webp"
+    },
+    {
+      "filename": "stand.webp",
+      "path": "assets/images/stand.webp",
+      "sha256": "25fd526352f998f487b9a6ebfc540d50502abc1d6d29b1d6da04dbc3b5333e89",
+      "contentType": "image/webp"
+    }
+  ]
+}

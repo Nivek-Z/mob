@@ -1,0 +1,10 @@
+{
+  "accent": "#315c43",
+  "readingWidth": 820,
+  "fontSize": 18,
+  "intro": {
+    "heading": "写下所见，也写下所想。",
+    "subtitle": "一些代码，一些日常，一些未完成的想法。"
+  },
+  "showGallery": true
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "paper",
+  "routes": {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/archive.html": "archive.html",
+    "/tags.html": "tags.html",
+    "/post.html": "post.html",
+    "/about.html": "about.html",
+    "/gallery.html": "gallery.html",
+    "/admin/": "admin/index.html",
+    "/admin/index.html": "admin/index.html",
+    "/admin/gallery.html": "admin/gallery.html",
+    "/admin/settings.html": "admin/settings.html",
+    "/404.html": "404.html"
+  },
+  "configs": [
+    {
+      "id": "reading",
+      "label": "纸间阅读设置",
+      "path": "config/reading.json",
+      "schemaPath": "config/reading.schema.json"
+    }
+  ]
+}

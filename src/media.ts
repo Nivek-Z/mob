@@ -8,6 +8,7 @@ const SESSION_TTL = 24 * 60 * 60 * 1000;
 const MIME_EXTENSIONS: Record<string, string[]> = {
   'image/jpeg': ['jpg', 'jpeg'], 'image/png': ['png'], 'image/gif': ['gif'],
   'image/webp': ['webp'], 'image/avif': ['avif'], 'video/mp4': ['mp4'], 'video/webm': ['webm'],
+  'audio/mpeg': ['mp3'], 'audio/wav': ['wav'], 'audio/ogg': ['ogg', 'opus'], 'audio/mp4': ['m4a'],
 };
 interface PartRecord { partNumber: number; etag: string; size: number; }
 interface UploadState { status: 'active' | 'completed' | 'aborted' | 'deleted'; at: string; }
@@ -35,17 +36,20 @@ function ascii(bytes: Uint8Array, offset: number, length: number): string {
 }
 /** File-header validation is deliberately bounded; it does not decode or transcode media. */
 function validSignature(bytes: Uint8Array, contentType: string): boolean {
+  if (contentType === 'audio/mpeg') return bytes.length >= 4 && (ascii(bytes, 0, 3) === 'ID3' || bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 6) !== 0 && (bytes[2] & 0xf0) !== 0xf0);
+  if (contentType === 'audio/wav') return bytes.length >= 12 && ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WAVE';
+  if (contentType === 'audio/ogg') return bytes.length >= 32 && ascii(bytes, 0, 4) === 'OggS' && /OpusHead|vorbis/.test(ascii(bytes, 0, Math.min(bytes.length, 4096)));
   if (contentType === 'image/jpeg') return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   if (contentType === 'image/png') return bytes.length >= 24 && [137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => bytes[i] === v) && ascii(bytes, 12, 4) === 'IHDR';
   if (contentType === 'image/gif') return bytes.length >= 13 && ['GIF87a', 'GIF89a'].includes(ascii(bytes, 0, 6));
   if (contentType === 'image/webp') return bytes.length >= 16 && ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP' && ['VP8 ', 'VP8L', 'VP8X'].includes(ascii(bytes, 12, 4));
-  if (contentType === 'image/avif' || contentType === 'video/mp4') {
+  if (contentType === 'image/avif' || contentType === 'video/mp4' || contentType === 'audio/mp4') {
     if (bytes.length < 16 || ascii(bytes, 4, 4) !== 'ftyp') return false;
     const boxSize = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
     if (boxSize < 16 || boxSize > bytes.length || boxSize > 4096 || boxSize % 4 !== 0) return false;
     const brands = [ascii(bytes, 8, 4)];
     for (let offset = 16; offset + 4 <= boxSize; offset += 4) brands.push(ascii(bytes, offset, 4));
-    return contentType === 'image/avif' ? brands.some(brand => brand === 'avif' || brand === 'avis')
+    return contentType === 'audio/mp4' ? brands.some(brand => ['M4A ', 'M4B ', 'mp42', 'isom'].includes(brand)) : contentType === 'image/avif' ? brands.some(brand => brand === 'avif' || brand === 'avis')
       : !brands.some(brand => brand === 'avif' || brand === 'avis') && brands.some(brand => /^iso[0-9m]$/.test(brand) || ['mp41', 'mp42', 'avc1', 'M4V ', 'MSNV', 'dash', 'cmfc', 'cmfs'].includes(brand));
   }
   if (contentType === 'video/webm') {
@@ -179,10 +183,11 @@ export class MediaService {
     }
     return session;
   }
-  async getUpload(id: string, identity: Identity): Promise<UploadSession> {
+  async getUpload(id: string, identity: Identity): Promise<UploadSession & { record?: MediaRecord; status: string }> {
     const session = await this.ownedSession(id, identity);
-    if (!(await this.getMedia(id))) await this.assertActive(session);
-    return session;
+    const record = await this.getMedia(id);
+    if (!record) await this.assertActive(session);
+    return { ...session, status: record ? 'completed' : 'active', ...(record ? { record } : {}) };
   }
   private verifyStoredObject(object: R2Object, session: UploadSession): void {
     if (object.size !== session.size || object.customMetadata?.uploadSessionId !== session.id || object.customMetadata?.owner !== session.owner || object.httpMetadata?.contentType !== session.contentType) {
@@ -308,7 +313,7 @@ export class MediaService {
     requireId(id);
     const record = await this.readRecord<MediaRecord>(recordKey(id));
     if (!record) return null;
-    if (record.id !== id || typeof record.filename !== 'string' || !/^[a-zA-Z0-9_-]+\.(jpg|png|gif|webp|avif|mp4|webm)$/.test(record.filename) || record.key !== `media/${id}/${record.filename}` || !Object.hasOwn(MIME_EXTENSIONS, record.contentType) || !Number.isSafeInteger(record.size) || record.size < 1) {
+    if (record.id !== id || typeof record.filename !== 'string' || !/^[a-zA-Z0-9_-]+\.(jpg|png|gif|webp|avif|mp4|webm|mp3|wav|ogg|m4a)$/.test(record.filename) || record.key !== `media/${id}/${record.filename}` || !Object.hasOwn(MIME_EXTENSIONS, record.contentType) || !Number.isSafeInteger(record.size) || record.size < 1) {
       throw new ApiError(503, 'MEDIA_STORAGE_ERROR', 'Stored media metadata is invalid.');
     }
     return record;

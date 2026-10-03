@@ -4,12 +4,18 @@ import { siteOrigin } from './config';
 import { GithubPosts, validateSavePostInput, validateSlug } from './posts';
 import { MediaService } from './media';
 import type { Env, Identity, Post, SavePostInput } from './types';
+import { SettingsService, SITE_PATH, validateSite } from './settings';
+import { GalleryService } from './gallery';
+import { isAdminAsset, routeTheme } from './themes';
+import { themeMedia } from './theme-media';
 export interface AppServices {
   posts: (env: Env) => GithubPosts;
   media: (env: Env) => MediaService;
+  settings: (env: Env) => SettingsService;
+  gallery: (env: Env) => GalleryService;
   authenticate: (request: Request, env: Env) => Promise<Identity>;
 }
-const defaults: AppServices = { posts: (env) => new GithubPosts(env), media: (env) => new MediaService(env), authenticate: requireIdentity };
+const defaults: AppServices = { posts: (env) => new GithubPosts(env), media: (env) => new MediaService(env), authenticate: requireIdentity, settings: env => new SettingsService(env), gallery: env => new GalleryService(env) };
 const readMethods = ['GET', 'HEAD'];
 function method(request: Request, allowed: string[]): void {
   if (!allowed.includes(request.method)) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Allowed methods: ' + allowed.join(', '), { allowed });
@@ -69,7 +75,8 @@ async function verifyMedia(references: ReturnType<typeof managedMedia>, media: M
 }
 function needsCoordinator(path: string, verb: string): boolean {
   return /^\/api\/admin\/posts\/[^/]+$/.test(path) && ['PUT', 'DELETE'].includes(verb)
-    || /^\/api\/admin\/media\/[^/]+$/.test(path) && verb === 'DELETE';
+    || /^\/api\/admin\/media\/[^/]+$/.test(path) && verb === 'DELETE'
+    || /^\/api\/admin\/(settings|themes|gallery)(\/|$)/.test(path) && !readMethods.includes(verb);
 }
 function decorate(response: Response, requestId: string, privateResponse: boolean): Response {
   const headers = new Headers(response.headers);
@@ -87,7 +94,7 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
       const requestId = crypto.randomUUID();
       const url = new URL(request.url);
       const path = url.pathname;
-      const admin = path === '/admin' || path.startsWith('/admin/') || path === '/api/admin' || path.startsWith('/api/admin/');
+      const admin = isAdminAsset(path) || path === '/api/admin' || path.startsWith('/api/admin/');
       try {
         let identity: Identity | undefined;
         if (admin) {
@@ -100,6 +107,51 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
           return decorate(await coordinator.fetch(request), requestId, true);
         }
         if (path === '/api/health') { method(request, ['GET']); return decorate(json({ status: 'ok' }), requestId, false); }
+        const seedMatch = /^\/theme-media\/([a-z0-9-]+)\/([a-zA-Z0-9_.-]+)$/.exec(path);
+        if (seedMatch) { method(request, readMethods); return decorate(await themeMedia(request, env, seedMatch[1], seedMatch[2]), requestId, false); }
+        if (/^\/themes\/[^/]+\/assets\/images\//.test(decodeFilename(path))) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Read theme media through its R2 URL.');
+        if (path === '/api/site') { method(request, ['GET']); return decorate(json({ value: (await services.settings(env).read(SITE_PATH)).value }), requestId, false); }
+        if (path === '/api/themes') {
+          method(request, ['GET']); const registration = (await services.settings(env).themes()).value;
+          return decorate(json({ ...registration, themes: registration.themes.filter(theme => theme.enabled) }), requestId, false);
+        }
+        let settingMatch = /^\/api\/(admin\/)?themes\/([a-z0-9-]+)\/config\/([a-z0-9-]+)$/.exec(path);
+        if (settingMatch) {
+          method(request, settingMatch[1] ? ['GET', 'PUT'] : ['GET']);
+          const result = request.method === 'PUT' ? await services.settings(env).saveTheme(settingMatch[2], settingMatch[3], await readJson(request, 512 * 1024)) : await services.settings(env).readTheme(settingMatch[2], settingMatch[3], !!settingMatch[1]);
+          return decorate(json(result), requestId, !!settingMatch[1]);
+        }
+        if (path === '/api/admin/themes') {
+          method(request, ['GET', 'PUT']);
+          return decorate(json(request.method === 'GET' ? await services.settings(env).themes() : await services.settings(env).saveRegistry(await readJson(request))), requestId, true);
+        }
+        if (path === '/api/admin/settings/site') {
+          method(request, ['GET', 'PUT']);
+          return decorate(json(request.method === 'GET' ? await services.settings(env).edit(SITE_PATH) : await services.settings(env).save(SITE_PATH, await readJson(request), validateSite)), requestId, true);
+        }
+        if (path === '/api/gallery/categories' || path === '/api/admin/gallery/categories') {
+          method(request, admin ? ['GET', 'PUT'] : ['GET']);
+          const result = request.method === 'PUT' ? await services.gallery(env).saveCategories(await readJson(request)) : await services.gallery(env).categories();
+          return decorate(json(admin ? result : { value: result.value }), requestId, admin);
+        }
+        if (path === '/api/gallery' || path === '/api/admin/gallery') {
+          method(request, admin ? ['GET', 'PATCH'] : ['GET']);
+          return decorate(json(request.method === 'PATCH' ? await services.gallery(env).update(await readJson(request)) : await services.gallery(env).list(url, admin)), requestId, admin);
+        }
+        if (path === '/api/admin/gallery/items') { method(request, ['POST']); return decorate(json(await services.gallery(env).register(await readJson(request)), 201), requestId, true); }
+        if (path === '/api/admin/gallery/import') {
+          method(request, ['POST']); const input = object(await readJson(request));
+          if (Object.keys(input).some(key => key !== 'cursor') || input.cursor !== undefined && typeof input.cursor !== 'string') throw new ApiError(400, 'INVALID_INPUT', 'Supply only an optional R2 cursor.');
+          return decorate(json(await services.gallery(env).import(input.cursor as string | undefined)), requestId, true);
+        }
+        settingMatch = /^\/api\/admin\/gallery\/items\/([^/]+)$/.exec(path);
+        if (settingMatch) {
+          method(request, ['DELETE']); requireId(settingMatch[1]);
+          const articles = (await services.posts(env).listPosts(true)).filter(post => post.mediaIds.includes(settingMatch![1])).map(post => post.slug);
+          const configs = await services.settings(env).usage(settingMatch[1]);
+          if (articles.length || configs.length) throw new ApiError(409, 'MEDIA_IN_USE', 'Remove all article/configuration references before deleting.', { articles, configs });
+          return decorate(json(await services.gallery(env).remove(settingMatch[1], await readJson(request))), requestId, true);
+        }
         if (path === '/api/posts') {
           method(request, ['GET']);
           return decorate(json(filterPosts(await services.posts(env).listPosts(), url)), requestId, false);
@@ -117,7 +169,7 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
           const record = await services.media(env).getMedia(match[1]);
           if (!record || record.filename !== decodeFilename(match[2])) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media not found.');
           const published = (await services.posts(env).listPosts()).some((post) => post.status === 'published' && post.mediaIds.includes(match![1]));
-          if (!published) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media not found.');
+          if (!published && !await services.gallery(env).grants(match[1]) && !(await services.settings(env).usage(match[1], true)).length) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media not found.');
           return decorate(await services.media(env).readMedia(match[1], request), requestId, true);
         }
         if (path === '/api/admin/session') { method(request, ['GET']); return decorate(json(identity!), requestId, true); }
@@ -177,13 +229,16 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
           method(request, ['DELETE']); requireId(match[1]);
           const references = (await services.posts(env).listPosts(true)).filter((post) => post.mediaIds.includes(match![1])).map((post) => post.slug);
           if (references.length) throw new ApiError(409, 'MEDIA_IN_USE', 'Remove this media from all articles before deleting it.', { articles: references });
+          const configs = await services.settings(env).usage(match[1]);
+          if (configs.length) throw new ApiError(409, 'MEDIA_IN_USE', 'Remove all configuration references before deleting.', { configs });
+          if ((await services.gallery(env).document()).items.some(item => item.id === match![1])) throw new ApiError(409, 'GALLERY_MANAGED', 'Delete registered media through the gallery endpoint.');
           await media.deleteMedia(match[1]);
           return decorate(json({ deleted: true }), requestId, true);
         }
         if (path === '/api' || path.startsWith('/api/') || path === '/media' || path.startsWith('/media/')) throw new ApiError(404, 'NOT_FOUND', 'API route not found.');
         method(request, readMethods);
         if (!env.ASSETS) throw new ApiError(404, 'FRONTEND_NOT_INSTALLED', 'Place frontend files in frontend/ and deploy.');
-        const asset = await env.ASSETS.fetch(request);
+        const asset = await routeTheme(request, env);
         return decorate(request.method === 'HEAD' ? new Response(null, asset) : asset, requestId, admin);
       } catch (error) {
         const known = error instanceof ApiError;

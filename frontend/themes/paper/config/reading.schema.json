@@ -1,0 +1,46 @@
+{
+  "type": "object",
+  "required": [
+    "accent",
+    "readingWidth",
+    "fontSize",
+    "intro",
+    "showGallery"
+  ],
+  "properties": {
+    "accent": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "readingWidth": {
+      "type": "number",
+      "minimum": 560,
+      "maximum": 1200
+    },
+    "fontSize": {
+      "type": "number",
+      "minimum": 14,
+      "maximum": 26
+    },
+    "intro": {
+      "type": "object",
+      "required": [
+        "heading",
+        "subtitle"
+      ],
+      "properties": {
+        "heading": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "showGallery": {
+      "type": "boolean"
+    }
+  }
+}
