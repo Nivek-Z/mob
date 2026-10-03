@@ -7,6 +7,7 @@ import { Miniflare, convertV4MiniflareOptions, Response as RuntimeResponse } fro
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { serializePost } from '../src/posts';
 import type { Post } from '../src/types';
+import { PLATFORM_FIXTURE_PATHS, readPlatformFixture } from './platform-fixtures';
 
 // Exercise the production entrypoint, native fetch, R2 and the mutation Durable Object.
 // Every outbound request is handled locally; no GitHub/Cloudflare credentials are used.
@@ -78,6 +79,9 @@ beforeAll(async () => {
     serviceBindings: { ASSETS: async req => {
       const url = new URL(req.url); let asset = url.pathname;
       if (asset.endsWith('/')) asset += 'index.html'; else if (!path.extname(asset)) asset += '.html';
+      // Deployed registry/config defaults must also be isolated from admin edits.
+      const fixturePath = 'frontend' + asset;
+      if (PLATFORM_FIXTURE_PATHS.some(filename => filename === fixturePath)) return new RuntimeResponse(readPlatformFixture(fixturePath), { headers: { 'Content-Type': 'application/json' } });
       const filename = path.resolve('frontend', '.' + asset);
       if (!filename.startsWith(path.resolve('frontend') + path.sep) || !existsSync(filename)) return new RuntimeResponse('missing', { status: 404 });
       const type = asset.endsWith('.json') ? 'application/json' : asset.endsWith('.html') ? 'text/html' : asset.endsWith('.avif') ? 'image/avif' : asset.endsWith('.webp') ? 'image/webp' : 'text/javascript';
@@ -145,7 +149,8 @@ beforeAll(async () => {
 beforeEach(() => {
   files.clear(); revision++; head = digest(String(revision)); rejectRef = false; pendingTrees.clear(); pendingCommits.clear(); upstreamStatus = 0; githubRequests = 0; commitStatus = 0; commitRequests = 0;
   storePost('public', 'published'); storePost('private', 'draft');
-  for (const filename of ['config/site/settings.json', 'config/gallery/categories.json', 'content/gallery/items.json', 'frontend/themes.json', 'frontend/themes/firefly/theme.json', 'frontend/themes/firefly/config/appearance.json', 'frontend/themes/firefly/config/appearance.schema.json', 'frontend/themes/paper/theme.json', 'frontend/themes/paper/config/reading.json', 'frontend/themes/paper/config/reading.schema.json']) storeFile(filename, readFileSync(filename, 'utf8'));
+  for (const filename of PLATFORM_FIXTURE_PATHS) storeFile(filename, readPlatformFixture(filename));
+  for (const filename of ['frontend/themes/firefly/theme.json', 'frontend/themes/firefly/config/appearance.schema.json', 'frontend/themes/paper/theme.json', 'frontend/themes/paper/config/reading.schema.json']) storeFile(filename, readFileSync(filename, 'utf8'));
   for (const theme of ['firefly', 'paper']) {
     const definition = JSON.parse(readFileSync(`frontend/themes/${theme}/theme.json`, 'utf8'));
     for (const page of Object.values(definition.routes) as string[]) storeFile(`frontend/themes/${theme}/${page}`, readFileSync(`frontend/themes/${theme}/${page}`, 'utf8'));
@@ -289,6 +294,21 @@ async function uploadFixture(filename = 'photo.png', contentType = 'image/png') 
   expect(response.status).toBe(200); return (await data(response)).data;
 }
 describe('platform integration in workerd', () => {
+  it('preserves an existing gallery item when another upload is registered and retried', async () => {
+    const existing = await uploadFixture('existing.png');
+    const first = (await data(await request('/api/admin/gallery/items', 'POST', { id: existing.id, source: 'theme' }, true))).data;
+    expect((await request('/api/admin/gallery', 'PATCH', { sha: first.sha, items: [{ id: existing.id, title: '已有图片', isPublic: true, isListed: true }] }, true)).status).toBe(200);
+    const added = await uploadFixture('new.png');
+    for (let attempt = 0; attempt < 2; attempt++) expect((await request('/api/admin/gallery/items', 'POST', { id: added.id, source: 'editor' }, true)).status).toBe(201);
+    const document = JSON.parse(files.get('content/gallery/items.json')!.content);
+    expect(document.items).toHaveLength(2);
+    expect(document.items.find((item: any) => item.id === existing.id)).toMatchObject({ title: '已有图片', isPublic: true, isListed: true, source: 'theme' });
+    expect(document.items.filter((item: any) => item.id === added.id)).toHaveLength(1);
+    expect(document.items.find((item: any) => item.id === added.id)).toMatchObject({ categoryId: 'article-images', isPublic: false, isListed: false });
+    expect((await data(await request('/api/gallery'))).data.items.map((item: any) => item.id)).toEqual([existing.id]);
+    expect((await request(new URL(existing.url).pathname)).status).toBe(200);
+    expect((await request(new URL(added.url).pathname)).status).toBe(404);
+  });
   it('keeps theme declarations, global text and R2 objects in their assigned stores', async () => {
     const record = await uploadFixture();
     const registered = await request('/api/admin/gallery/items', 'POST', { id: record.id, source: 'editor' }, true);

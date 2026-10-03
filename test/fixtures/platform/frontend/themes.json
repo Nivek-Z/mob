@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "defaultTheme": "firefly",
+  "allowVisitorSwitch": true,
+  "themes": [
+    {
+      "id": "firefly",
+      "name": "萤火小屋",
+      "root": "themes/firefly",
+      "enabled": true
+    },
+    {
+      "id": "paper",
+      "name": "纸间",
+      "root": "themes/paper",
+      "enabled": true
+    }
+  ]
+}

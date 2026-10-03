@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
+import { readPlatformFixture } from './platform-fixtures';
 
 function fixture(filename: string, script?: string) {
   const dom = new JSDOM(readFileSync(filename, 'utf8'), { url: 'https://blog.example.com/', runScripts: 'outside-only', pretendToBeVisual: true });
@@ -14,7 +15,7 @@ function fixture(filename: string, script?: string) {
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 describe('theme frontends', () => {
   it('ships complete standalone routes, valid asset references and its own admin per theme', () => {
-    const registration = JSON.parse(readFileSync('frontend/themes.json', 'utf8'));
+    const registration = JSON.parse(readPlatformFixture('frontend/themes.json'));
     for (const theme of registration.themes) {
       const declaration = JSON.parse(readFileSync('frontend/' + theme.root + '/theme.json', 'utf8'));
       expect(declaration.routes['/admin/']).toBe('admin/index.html');
@@ -45,7 +46,7 @@ describe('theme frontends', () => {
   });
   it('applies Firefly cover, custom image stickers, text and styles from its own config', async () => {
     const { dom, win } = fixture('frontend/themes/firefly/index.html');
-    const value = JSON.parse(readFileSync('frontend/themes/firefly/config/appearance.json', 'utf8'));
+    const value = JSON.parse(readPlatformFixture('frontend/themes/firefly/config/appearance.json'));
     value.hero.cover = '/media/custom/cover.png'; value.stickers = [{ text: '', image: '/media/custom/sticker.png', x: 20, y: 40, rotation: 12, size: 50 }]; value.guide.title = '新导航'; value.styles = { '.hero-identity': { 'letter-spacing': '2px' } };
     win.Mob.api = vi.fn(async () => ({ value })); win.eval(readFileSync('frontend/themes/firefly/js/config.js', 'utf8')); await tick();
     expect(win.document.querySelector('.hero-backdrop')?.getAttribute('src')).toContain('/media/custom/cover.png');
@@ -55,7 +56,7 @@ describe('theme frontends', () => {
   });
   it('keeps settings input after a GitHub SHA conflict', async () => {
     const { dom, win } = fixture('frontend/themes/firefly/admin/settings.html');
-    const value = JSON.parse(readFileSync('frontend/themes/firefly/config/appearance.json', 'utf8'));
+    const value = JSON.parse(readPlatformFixture('frontend/themes/firefly/config/appearance.json'));
     const api = vi.fn(async (_url, options) => { if (options?.method === 'PUT') throw Object.assign(new Error('conflict'), { code: 'CONFIG_CONFLICT' }); return { sha: 'a'.repeat(40), value, mediaIds: [] }; });
     win.Mob.api = api; win.eval(readFileSync('frontend/themes/firefly/admin/settings.js', 'utf8')); await tick();
     const raw = win.document.getElementById('settings-json') as HTMLTextAreaElement; value.hero.eyebrow = '未保存的文字'; raw.value = JSON.stringify(value); raw.dispatchEvent(new win.Event('input'));

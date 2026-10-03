@@ -1,0 +1,32 @@
+{
+  "title": "Runtime fixture blog",
+  "description": "Synthetic shared settings for isolated tests.",
+  "profile": {
+    "name": "Fixture owner",
+    "bio": "Test profile",
+    "avatar": ""
+  },
+  "socials": [
+    {
+      "label": "GitHub",
+      "url": "https://github.com/owner/blog"
+    }
+  ],
+  "friends": [],
+  "navigation": [
+    {
+      "label": "Home",
+      "url": "/"
+    }
+  ],
+  "activity": {
+    "enabled": true,
+    "title": "代码足迹",
+    "days": 365,
+    "timezone": "Asia/Hong_Kong",
+    "github": {
+      "enabled": true,
+      "title": "GitHub 提交活动"
+    }
+  }
+}

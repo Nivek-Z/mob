@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 import { activityStats, calendarDays } from '../src/activity';
+import { readPlatformFixture } from './platform-fixtures';
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 function open(theme: string, page: string) {
   const dom = new JSDOM(readFileSync(`frontend/themes/${theme}/${page}`, 'utf8'), { url: 'https://blog.example.com', runScripts: 'outside-only', pretendToBeVisual: true });
@@ -42,8 +43,8 @@ describe('activity and storage frontends', () => {
     });
     it(`${theme} saves activity through shared settings with its current SHA`, async () => {
       const { dom, win } = open(theme, 'admin/settings.html');
-      const site = JSON.parse(readFileSync('config/site/settings.json', 'utf8'));
-      const defaultValue = JSON.parse(readFileSync(`frontend/themes/${theme}/config/${theme === 'paper' ? 'reading' : 'appearance'}.json`, 'utf8'));
+      const site = JSON.parse(readPlatformFixture('config/site/settings.json'));
+      const defaultValue = JSON.parse(readPlatformFixture(`frontend/themes/${theme}/config/${theme === 'paper' ? 'reading' : 'appearance'}.json`));
       const api = vi.fn(async (url: string, options?: any) => options?.method === 'PUT' ? { sha: 'b'.repeat(40), value: options.json.value, commitSha: 'c'.repeat(40) } : { sha: 'a'.repeat(40), value: url === '/api/admin/settings/site' ? site : defaultValue, mediaIds: [] });
       win.Mob.api = api; win.eval(readFileSync(`frontend/themes/${theme}/admin/settings.js`, 'utf8')); await tick();
       const selector = win.document.getElementById(theme === 'paper' ? 'paper-doc' : 'settings-document') as unknown as HTMLSelectElement;

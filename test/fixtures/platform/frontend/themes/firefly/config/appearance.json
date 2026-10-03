@@ -1,0 +1,119 @@
+{
+  "hero": {
+    "eyebrow": "WELCOME TO MY CORNER",
+    "occupation": "[ 代码 / 笔记 / 日常 ]",
+    "cover": "/theme-media/firefly/hero.avif"
+  },
+  "images": {
+    "scene-3": "/theme-media/firefly/scene-3.webp",
+    "card-archive": "/theme-media/firefly/card-archive.avif",
+    "scene-cycle": "/theme-media/firefly/scene-cycle.webp",
+    "card-contact": "/theme-media/firefly/card-contact.avif",
+    "scene-1": "/theme-media/firefly/scene-1.webp",
+    "character": "/theme-media/firefly/character.avif",
+    "hero": "/theme-media/firefly/hero.avif",
+    "scene-5": "/theme-media/firefly/scene-5.webp",
+    "foreground": "/theme-media/firefly/foreground.webp",
+    "card-notes": "/theme-media/firefly/card-notes.avif",
+    "scene-4": "/theme-media/firefly/scene-4.webp",
+    "stand": "/theme-media/firefly/stand.webp",
+    "scene-2": "/theme-media/firefly/scene-2.webp"
+  },
+  "stickers": [
+    {
+      "text": "✳",
+      "x": 78,
+      "y": 22,
+      "rotation": -12,
+      "size": 36
+    },
+    {
+      "text": "STAY CURIOUS",
+      "x": 18,
+      "y": 72,
+      "rotation": 8,
+      "size": 16
+    }
+  ],
+  "motion": {
+    "enabled": true,
+    "rain": true,
+    "ticker": true,
+    "heroScrollVh": 330,
+    "storyScrollVh": 360
+  },
+  "guide": {
+    "title": "小屋导览",
+    "introTitle": "保持好奇。",
+    "introText": "代码、学习，和生活里的小小片段。"
+  },
+  "journey": {
+    "title": "愿你的旅途",
+    "wishes": [
+      "一直有星光",
+      "岁岁皆欢愉",
+      "所念皆星河",
+      "热爱不打烊"
+    ],
+    "heading": "每一步，都算数。",
+    "scenes": [
+      {
+        "title": "筑一间小屋",
+        "description": "把热爱安放在这里，让每一个念头都有自己的落点。",
+        "image": "/theme-media/firefly/scene-1.webp"
+      },
+      {
+        "title": "让想法发生",
+        "description": "从一个灵感开始，用代码把脑海里的画面变成现实。",
+        "image": "/theme-media/firefly/scene-2.webp"
+      },
+      {
+        "title": "向未知出发",
+        "description": "那些绕过的弯路，也值得写下来。",
+        "image": "/theme-media/firefly/scene-3.webp"
+      },
+      {
+        "title": "留住这一刻",
+        "description": "留一点篇幅，给小小的快乐。",
+        "image": "/theme-media/firefly/scene-4.webp"
+      },
+      {
+        "title": "下一程山水",
+        "description": "故事还长，慢慢写，慢慢走。",
+        "image": "/theme-media/firefly/scene-5.webp"
+      }
+    ]
+  },
+  "dialogue": {
+    "name": "小屋向导",
+    "welcome": "欢迎来到我的小屋。想先看看什么？",
+    "topics": {
+      "about": [
+        "这里是我的个人空间，记录学习与日常。",
+        "/about.html",
+        "认识一下我 ↗"
+      ],
+      "reading": [
+        "阅读室里放着已经发布的笔记。",
+        "/archive.html",
+        "去阅读室看看 ↗"
+      ],
+      "contact": [
+        "通过下方链接找到我。",
+        "/about.html",
+        "找到我 ↗"
+      ]
+    }
+  },
+  "outro": {
+    "title": "来日方长。",
+    "subtitle": "慢慢逛，慢慢聊。"
+  },
+  "copy": {
+    ".about-intro h2": "把好奇，变成一段段记录。",
+    ".about-intro > p:nth-of-type(2)": "这里是我的个人小屋。放下写过的代码、学到的新东西，也留住日常里值得记下的片段。",
+    ".about-note h2": "不赶路，也别停下。",
+    ".home-outro .eyebrow": "TO BE CONTINUED"
+  },
+  "styles": {}
+}
