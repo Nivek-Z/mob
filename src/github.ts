@@ -54,7 +54,7 @@ export class GitHubClient {
     this.config = repositoryConfig(env);
     this.baseUrl = `https://api.github.com/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(this.config.repo)}`;
   }
-  private async request(path: string, method = 'GET', body?: unknown, apiRoot = false): Promise<Response> {
+  private async request(path: string, method = 'GET', body?: unknown, apiRoot = false, signal?: AbortSignal): Promise<Response> {
     if (method !== 'GET' && !this.env.GITHUB_TOKEN?.trim()) throw new ApiError(503, 'GITHUB_NOT_CONFIGURED', 'GitHub write access is not configured.');
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': GITHUB_API_VERSION, 'User-Agent': 'mob-blog-worker',
@@ -65,7 +65,7 @@ export class GitHubClient {
     try {
       // Workers native fetch rejects an unrelated receiver. Calling it as
       // this.fetcher(...) would supply this GitHubClient as the receiver.
-      response = await this.fetcher.call(globalThis, `${apiRoot ? 'https://api.github.com' : this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+      response = await this.fetcher.call(globalThis, `${apiRoot ? 'https://api.github.com' : this.baseUrl}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: signal ?? AbortSignal.timeout(15000) });
     } catch (error) {
       const timeout = (error instanceof Error || error instanceof DOMException) && ['TimeoutError', 'AbortError'].includes(error.name);
       const invocation = error instanceof Error && error.message.includes('Illegal invocation');
@@ -87,6 +87,9 @@ export class GitHubClient {
     return response;
   }
   private async data(response: Response, maximumBytes = 4 * 1024 * 1024): Promise<Record<string, unknown>> {
+    return record(await this.payload(response, maximumBytes));
+  }
+  private async payload(response: Response, maximumBytes = 4 * 1024 * 1024): Promise<unknown> {
     // Bound upstream allocations; neither GitHub trees nor batched sources may consume the whole Worker heap.
     if (!response.body) throw upstreamError();
     const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let total = 0;
@@ -99,7 +102,7 @@ export class GitHubClient {
       }
       const bytes = new Uint8Array(total); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-      return record(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+      return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     } catch { throw upstreamError(); } finally { reader.releaseLock(); }
   }
   async readFile(path: string, ref = this.config.branch): Promise<RepositoryFile | null> {
@@ -110,8 +113,8 @@ export class GitHubClient {
     if (data.type !== 'file' || data.encoding !== 'base64' || !validSha(data.sha)) throw upstreamError();
     return { sha: data.sha, content: base64Decode(data.content) };
   }
-  async readHead(): Promise<string | null> {
-    const response = await this.request(`/git/ref/heads/${encodePath(this.config.branch)}`);
+  async readHead(signal?: AbortSignal): Promise<string | null> {
+    const response = await this.request(`/git/ref/heads/${encodePath(this.config.branch)}`, 'GET', undefined, false, signal);
     if (response.status === 409) return null;
     if (response.status === 404) throw new ApiError(503, 'GITHUB_REPOSITORY_UNAVAILABLE', 'The configured GitHub repository or branch is unavailable.');
     if (!response.ok) throw upstreamError();
@@ -135,6 +138,28 @@ export class GitHubClient {
       const size = typeof entry.size === 'number' && Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : undefined;
       return [{ path: entry.path, sha: entry.sha, ...(size === undefined ? {} : { size }) }];
     });
+  }
+  /** Read one immutable history; never return a silently truncated heatmap. */
+  async listCommitDates(since: string, until: string): Promise<{ sha: string; date: string }[]> {
+    const signal = AbortSignal.timeout(15000);
+    const head = await this.readHead(signal);
+    const commits = new Map<string, string>();
+    for (let page = 1; page <= 20; page++) {
+      const query = new URLSearchParams({ sha: head ?? this.config.branch, since, until, per_page: '100', page: String(page) });
+      const response = await this.request('/commits?' + query, 'GET', undefined, false, signal);
+      if (response.status === 409 && page === 1 && head === null) { await response.body?.cancel(); return []; }
+      if (response.status === 404) { await response.body?.cancel(); throw new ApiError(503, 'GITHUB_REPOSITORY_UNAVAILABLE', 'The configured repository or branch is unavailable.'); }
+      if (!response.ok) { await response.body?.cancel(); throw upstreamError(); }
+      const values = await this.payload(response);
+      if (!Array.isArray(values) || values.length > 100) throw upstreamError();
+      for (const value of values) {
+        const commit = record(value), date = record(record(commit.commit).committer).date;
+        if (!validSha(commit.sha) || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(date) || !Number.isFinite(Date.parse(date))) throw upstreamError();
+        commits.set(commit.sha, new Date(date).toISOString());
+      }
+      if (!/<[^>]+>;\s*rel="next"/.test(response.headers.get('Link') ?? '')) return [...commits].map(([sha, date]) => ({ sha, date }));
+    }
+    throw new ApiError(502, 'ACTIVITY_TOO_LARGE', 'The activity interval exceeds the bounded history reader. Reduce activity.days.');
   }
   async readBlob(sha: string): Promise<string> {
     if (!validSha(sha)) throw new ApiError(400, 'INVALID_SHA', 'A valid article SHA is required.');

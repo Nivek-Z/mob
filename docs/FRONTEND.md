@@ -13,10 +13,12 @@
 | `frontend/themes/<id>/admin/` | 主题自己的后台 HTML、脚本与样式 |
 | `frontend/themes/<id>/config/` | 主题自己定义的 JSON、Schema、默认配置 |
 | `frontend/core/` | 可选客户端助手，无统一管理 UI要求 |
-| `config/site/settings.json` | 共用个人资料、社交、友链、导航 |
+| `config/site/settings.json` | 共用个人资料、社交、友链、导航与仓库活动设置 |
 | `config/gallery/categories.json` | 共用图床分类 |
 
 部署时复制静态产物到 `dist/client/`。README、AGENTS、隐藏文件和 node_modules 不发布；不要修改生成目录。主题的管理入口必须位于 `/admin/`，其管理资产必须位于本主题 `admin/`。不允许给后台建立未鉴权的公开别名。
+
+活动图读取共用 `/api/activity`，可复用 `frontend/core/activity.js` 或由主题自行绘制；配置在公共资料后台写回，统计状态和日期口径见 [ACTIVITY.md](ACTIVITY.md)。图床后台通过 `/api/admin/gallery/storage` 扫描 R2 中未登记素材，并通过私有预览和显式纳入接口处理主题图片与历史对象；详见 [API.md](API.md)。主题自行决定样式，不另存一份公共配置或图床索引。
 
 使用框架时，在 frontend 添加 package.json 与锁文件，通过 `mob.config.json` 配置安装、构建命令及输出目录。必须输出静态 HTML/CSS/JS；纯 CSR 或 SSG 都可以，SSR 不能直接放静态目录运行。默认前端 package 的 npm run build 输出 frontend/dist。
 

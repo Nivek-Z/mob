@@ -1,0 +1,23 @@
+.github-activity { --activity-cell:15px; --activity-gap:4px; --activity-zero:var(--line); --activity-1:color-mix(in srgb,var(--accent) 25%,var(--surface)); --activity-2:color-mix(in srgb,var(--accent) 45%,var(--surface)); --activity-3:color-mix(in srgb,var(--accent) 70%,var(--surface)); --activity-4:var(--accent); max-width:1180px; width:calc(100% - 72px); margin:90px auto 120px; padding:36px; border:1px solid var(--line); border-radius:28px; background:var(--surface); color:var(--ink); }
+.github-activity[hidden] { display:none; }
+.activity-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.activity-eyebrow { margin:0 0 9px; color:var(--muted); font-size:11px; letter-spacing:.15em; }
+.activity-title { margin:0; font-size:clamp(26px,3vw,38px); letter-spacing:-.05em; }
+.activity-repository { color:var(--accent); font-size:13px; overflow-wrap:anywhere; }
+.activity-context,.activity-updated { color:var(--muted); font-size:12px; line-height:1.7; margin:14px 0 24px; }
+.activity-scroll { overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; padding:6px 0 12px; }
+.activity-chart { display:grid; grid-template-columns:22px auto; grid-template-rows:24px auto; width:max-content; }
+.activity-months { display:grid; grid-column:2; grid-template-columns:repeat(var(--activity-weeks),var(--activity-cell)); gap:var(--activity-gap); color:var(--muted); font-size:11px; white-space:nowrap; }
+.activity-weekdays { display:grid; grid-column:1; grid-row:2; grid-template-rows:repeat(7,var(--activity-cell)); gap:var(--activity-gap); color:var(--muted); font-size:10px; align-items:center; }
+.activity-calendar { display:grid; grid-column:2; grid-row:2; grid-template-columns:repeat(var(--activity-weeks),var(--activity-cell)); grid-template-rows:repeat(7,var(--activity-cell)); gap:var(--activity-gap); }
+.activity-cell { display:block; width:var(--activity-cell); height:var(--activity-cell); min-width:0; padding:0; margin:0; border:0; border-radius:4px; background:var(--activity-zero); cursor:pointer; }
+.activity-cell[data-level="1"] { background:var(--activity-1); }.activity-cell[data-level="2"] { background:var(--activity-2); }.activity-cell[data-level="3"] { background:var(--activity-3); }.activity-cell[data-level="4"] { background:var(--activity-4); }
+.activity-cell:hover,.activity-cell[aria-pressed="true"] { box-shadow:0 0 0 2px var(--ink); }.activity-cell:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+.activity-legend { display:flex; align-items:center; justify-content:flex-end; gap:5px; color:var(--muted); font-size:11px; margin-top:2px; }
+.activity-legend .activity-cell { cursor:default; width:11px; height:11px; border-radius:3px; }
+.activity-detail { color:var(--muted); font-size:12px; min-height:1.6em; margin:8px 0 22px; }
+.activity-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin:0; padding:22px 0; border:1px solid var(--line); border-radius:18px; }
+.activity-stat { text-align:center; padding:0 12px; border-right:1px solid var(--line); }.activity-stat:last-child { border-right:0; }
+.activity-stat dd { font-size:23px; font-weight:600; letter-spacing:-.03em; margin:0 0 7px; }.activity-stat dt { color:var(--muted); font-size:12px; }
+.activity-updated { margin:18px 0 0; }.activity-notice { color:var(--muted); font-size:13px; line-height:1.7; }.activity-retry { border:1px solid var(--line); background:var(--bg); color:var(--accent); padding:10px 16px; border-radius:12px; cursor:pointer; }.activity-retry:disabled { opacity:.5; }
+@media (max-width:680px) { .github-activity { width:calc(100% - 32px); padding:24px 18px; margin:48px auto 72px; border-radius:22px; --activity-cell:20px; --activity-gap:5px; }.activity-heading { align-items:flex-start; flex-direction:column; gap:12px; }.activity-context { margin-bottom:16px; }.activity-stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px 0; padding:22px 0; }.activity-stat:nth-child(2n) { border-right:0; }.activity-stat:last-child { grid-column:1 / -1; }.activity-stat dd { font-size:21px; } }

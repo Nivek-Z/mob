@@ -59,9 +59,11 @@
   document.getElementById('gallery-file').addEventListener('change', event => { uploads([...event.target.files]); event.target.value = ''; });
   document.getElementById('gallery-import').addEventListener('click', async () => {
     if (busy || pending.size && !confirm('导入前会重新加载图库。放弃当前未保存的修改？')) return; busy = true; let cursor;
-    try { do { const page = await api('/api/admin/gallery/import', { method: 'POST', json: cursor ? { cursor } : {} }); cursor = page.cursor; say('正在导入已有 R2 媒体，保持原 ID…'); } while (cursor); await load(); say('已有 R2 媒体已导入，默认私有。'); }
+    try { do { const page = await api('/api/admin/gallery/import', { method: 'POST', json: cursor ? { cursor } : {} }); cursor = page.cursor; say('正在登记历史上传，保持原 ID…'); } while (cursor); await load(); say('历史上传已登记，默认私有。'); }
     catch (error) { say(error.message); } finally { busy = false; }
   });
+  window.addEventListener('mob:gallery-storage-before-import', event => { if (pending.size || busy) event.preventDefault(); });
+  window.addEventListener('mob:gallery-storage-import', () => { if (!pending.size) load().catch(error => say(error.message)); else say('新素材已纳入，当前修改保留；请保存前确认图库版本。'); });
   window.addEventListener('beforeunload', event => { if (pending.size) { event.preventDefault(); event.returnValue = ''; } });
   api('/api/admin/gallery/categories').then(result => { categories = result.value.items; [category, document.getElementById('batch-category')].forEach(select => { categories.forEach(c => { const option = document.createElement('option'); option.value = c.id; option.textContent = c.name; select.append(option); }); }); return load(); }).catch(error => say(error.message));
 })();

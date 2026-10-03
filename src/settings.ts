@@ -5,6 +5,7 @@ import { registry, manifest, type ThemeConfig } from './themes';
 import { siteOrigin } from './config';
 import { MediaService } from './media';
 import type { Env } from './types';
+import { activityConfig } from './activity-config';
 
 export const SITE_PATH = 'config/site/settings.json';
 export const THEMES_PATH = 'frontend/themes.json';
@@ -51,6 +52,7 @@ export function references(value: unknown, env: Env, explicit: string[] = []): {
 }
 export function validateSite(value: unknown): void {
   const site = object(value); const profile = object(site.profile);
+  if (site.activity !== undefined) activityConfig(site.activity);
   if (typeof site.title !== 'string' || !site.title.trim() || site.title.length > 200 || typeof site.description !== 'string' || site.description.length > 2000 || typeof profile.name !== 'string' || !profile.name.trim() || profile.name.length > 100 || typeof profile.bio !== 'string' || profile.bio.length > 4000 || typeof profile.avatar !== 'string') throw new ApiError(422, 'INVALID_SITE', 'Supply title, description and profile name, bio and avatar.');
   for (const group of ['socials', 'friends']) {
     if (!Array.isArray(site[group]) || (site[group] as unknown[]).length > 100) throw new ApiError(422, 'INVALID_SITE', 'Links must be arrays with at most 100 entries.');

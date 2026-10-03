@@ -11,3 +11,7 @@
 主题自带图片作为部署种子，在 `/theme-media/<id>/<filename>` 第一次读取时写入 R2，以后从 R2 提供。原始 `assets/images/` 入口被 Worker 阻止。自定义图片从后台上传图床，把稳定 URL 保存到对应配置即可。图床上传不进入 GitHub。
 
 新主题接入步骤、接口和验证要求见 [THEMES.md](../docs/THEMES.md)、[FRONTEND.md](../docs/FRONTEND.md)。参考素材与解析器许可保留在 Firefly 的 `assets/` 中。
+
+仓库活动来自共用 `/api/activity` 和 `config/site/settings.json`，两套首页分别使用自身样式呈现每日提交与区间统计，可选助手为 `core/activity.js`。统计状态、日期和后台字段规则见 [ACTIVITY.md](../docs/ACTIVITY.md)；不能把上游故障显示为零提交。
+
+图床后台通过 `/api/admin/gallery/storage` 发现 R2 中未登记素材。可选 `core/storage.js` 负责扫描、私有预览及显式纳入，主题定义面板样式；纳入前派发可取消的 `mob:gallery-storage-before-import`，成功后派发 `mob:gallery-storage-import`，用于保护未保存输入并刷新图库。主题/旧文件创建副本，保留原文件；历史上传保留原 ID。

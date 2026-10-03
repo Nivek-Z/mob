@@ -2,7 +2,7 @@ import { ApiError, object, requireId } from './http';
 import { validSha } from './github';
 import { SettingsService, CATEGORIES_PATH, DEFAULT_CATEGORIES, GALLERY_PATH, encodeDocument, validateCategories } from './settings';
 import { MediaService } from './media';
-import type { Env, MediaRecord } from './types';
+import type { Env, MediaRecord, Identity } from './types';
 
 export interface GalleryItem { id: string; filename: string; url: string; contentType: string; size: number; createdAt: string; title: string; description: string; categoryId: string; tags: string[]; isPublic: boolean; isListed: boolean; source: 'editor' | 'gallery' | 'theme' | 'import'; }
 export class GalleryService {
@@ -79,6 +79,17 @@ export class GalleryService {
     const page = await this.media.listMedia(cursor); const document = await this.document();
     const existing = new Set(document.items.map(item => item.id)); const additions = page.items.filter(record => !existing.has(record.id)).map(record => this.entry(record, 'import'));
     return { imported: additions.length, cursor: page.cursor, ...(additions.length ? await this.save([...document.items, ...additions], document.sha) : { sha: document.sha }) };
+  }
+  async storage(cursor?: string) {
+    const [page, document] = await Promise.all([this.media.listStoredMedia(cursor), this.document()]);
+    const registered = new Set(document.items.map(item => item.id));
+    return { items: page.items.filter(item => !registered.has(item.id)), cursor: page.cursor };
+  }
+  async importStorage(value: unknown, owner: Identity) {
+    const input = object(value);
+    if (Object.keys(input).some(key => !['key', 'etag'].includes(key)) || typeof input.key !== 'string' || typeof input.etag !== 'string' || input.etag.length > 200) throw new ApiError(400, 'INVALID_INPUT', 'Supply the stored media key and its current ETag.');
+    const record = await this.media.importStoredMedia(input.key, input.etag, owner);
+    return this.register({ id: record.id, source: 'import' });
   }
   async saveCategories(input: unknown) {
     const value = object(input).value; validateCategories(value);

@@ -8,14 +8,16 @@ import { SettingsService, SITE_PATH, validateSite } from './settings';
 import { GalleryService } from './gallery';
 import { isAdminAsset, routeTheme } from './themes';
 import { themeMedia } from './theme-media';
+import { ActivityService } from './activity';
 export interface AppServices {
   posts: (env: Env) => GithubPosts;
   media: (env: Env) => MediaService;
   settings: (env: Env) => SettingsService;
   gallery: (env: Env) => GalleryService;
+  activity: (env: Env) => ActivityService;
   authenticate: (request: Request, env: Env) => Promise<Identity>;
 }
-const defaults: AppServices = { posts: (env) => new GithubPosts(env), media: (env) => new MediaService(env), authenticate: requireIdentity, settings: env => new SettingsService(env), gallery: env => new GalleryService(env) };
+const defaults: AppServices = { posts: (env) => new GithubPosts(env), media: (env) => new MediaService(env), authenticate: requireIdentity, settings: env => new SettingsService(env), gallery: env => new GalleryService(env), activity: env => new ActivityService(env) };
 const readMethods = ['GET', 'HEAD'];
 function method(request: Request, allowed: string[]): void {
   if (!allowed.includes(request.method)) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Allowed methods: ' + allowed.join(', '), { allowed });
@@ -111,6 +113,13 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
         if (seedMatch) { method(request, readMethods); return decorate(await themeMedia(request, env, seedMatch[1], seedMatch[2]), requestId, false); }
         if (/^\/themes\/[^/]+\/assets\/images\//.test(decodeFilename(path))) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Read theme media through its R2 URL.');
         if (path === '/api/site') { method(request, ['GET']); return decorate(json({ value: (await services.settings(env).read(SITE_PATH)).value }), requestId, false); }
+        if (path === '/api/activity') {
+          method(request, ['GET']);
+          if (url.search) throw new ApiError(400, 'INVALID_QUERY', 'Activity uses only the configured repository, branch and date range.');
+          const response = json(await services.activity(env).read());
+          response.headers.set('Cache-Control', 'no-store');
+          return decorate(response, requestId, false);
+        }
         if (path === '/api/themes') {
           method(request, ['GET']); const registration = (await services.settings(env).themes()).value;
           return decorate(json({ ...registration, themes: registration.themes.filter(theme => theme.enabled) }), requestId, false);
@@ -139,6 +148,17 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
           return decorate(json(request.method === 'PATCH' ? await services.gallery(env).update(await readJson(request)) : await services.gallery(env).list(url, admin)), requestId, admin);
         }
         if (path === '/api/admin/gallery/items') { method(request, ['POST']); return decorate(json(await services.gallery(env).register(await readJson(request)), 201), requestId, true); }
+        if (path === '/api/admin/gallery/storage') {
+          method(request, ['GET']);
+          if ([...url.searchParams.keys()].some(key => key !== 'cursor')) throw new ApiError(400, 'INVALID_QUERY', 'Supply only an optional storage cursor.');
+          return decorate(json(await services.gallery(env).storage(url.searchParams.get('cursor') ?? undefined)), requestId, true);
+        }
+        if (path === '/api/admin/gallery/storage/file') {
+          method(request, readMethods);
+          if (!url.searchParams.has('key') || [...url.searchParams.keys()].some(key => key !== 'key')) throw new ApiError(400, 'INVALID_QUERY', 'Supply a stored media key.');
+          return decorate(await services.media(env).previewStoredMedia(url.searchParams.get('key')!, request), requestId, true);
+        }
+        if (path === '/api/admin/gallery/storage/import') { method(request, ['POST']); return decorate(json(await services.gallery(env).importStorage(await readJson(request), identity!)), requestId, true); }
         if (path === '/api/admin/gallery/import') {
           method(request, ['POST']); const input = object(await readJson(request));
           if (Object.keys(input).some(key => key !== 'cursor') || input.cursor !== undefined && typeof input.cursor !== 'string') throw new ApiError(400, 'INVALID_INPUT', 'Supply only an optional R2 cursor.');

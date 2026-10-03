@@ -12,6 +12,7 @@ const MIME_EXTENSIONS: Record<string, string[]> = {
 };
 interface PartRecord { partNumber: number; etag: string; size: number; }
 interface UploadState { status: 'active' | 'completed' | 'aborted' | 'deleted'; at: string; }
+export interface StoredMediaSource { key: string; etag: string; id: string; filename: string; contentType: string; size: number; createdAt: string; kind: 'managed' | 'theme' | 'legacy'; digest: string; }
 const sessionKey = (id: string) => `.mob/uploads/${id}/session.json`;
 const recordKey = (id: string) => `.mob/media/${id}.json`;
 const partKey = (id: string, number: number) => `.mob/uploads/${id}/parts/${number}.json`;
@@ -318,6 +319,87 @@ export class MediaService {
     }
     return record;
   }
+  private async storageSource(object: R2Object): Promise<StoredMediaSource | null> {
+    const key = object.key;
+    if (!key || key.length > 1024 || /[\x00-\x1f\x7f]/.test(key) || key.startsWith('.mob/') || key.startsWith('cache/') || object.size < 1 || object.size > this.maxSize()) return null;
+    let contentType = object.httpMetadata?.contentType?.split(';')[0].trim().toLowerCase();
+    const basename = key.split('/').at(-1)!;
+    if (!contentType || contentType === 'application/octet-stream') {
+      const extension = basename.split('.').at(-1)?.toLowerCase();
+      contentType = Object.entries(MIME_EXTENSIONS).find(([, extensions]) => extensions.includes(extension ?? ''))?.[0];
+    }
+    if (!contentType || !Object.hasOwn(MIME_EXTENSIONS, contentType)) return null;
+    let filename: string; try { filename = filenameFor(basename, contentType); } catch { return null; }
+    const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key + '\0' + object.etag)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const bytes = Uint8Array.from(digest.slice(0, 32).match(/../g)!, value => parseInt(value, 16)); bytes[6] = bytes[6] & 15 | 64; bytes[8] = bytes[8] & 63 | 128;
+    const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+    let id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    let kind: StoredMediaSource['kind'] = key.startsWith('theme-media/') ? 'theme' : 'legacy';
+    const managed = /^media\/([a-f0-9-]{36})\/([^/]+)$/.exec(key);
+    if (managed && managed[2] === filename) {
+      try { requireId(managed[1]); } catch { return null; }
+      const record = await this.getMedia(managed[1]);
+      if (record && record.key !== key) return null;
+      // Never adopt an unfinished or deleted upload as a completed image.
+      if (!record && (await this.env.MEDIA.head(sessionKey(managed[1])) || await this.env.MEDIA.head(stateKey(managed[1])))) return null;
+      id = managed[1]; kind = 'managed';
+    }
+    return { key, etag: object.etag, id, filename, contentType, size: object.size, createdAt: object.uploaded.toISOString(), kind, digest };
+  }
+  async listStoredMedia(cursor?: string): Promise<{ items: StoredMediaSource[]; cursor: string | null }> {
+    if (cursor !== undefined && (typeof cursor !== 'string' || cursor.length > 4096)) throw new ApiError(400, 'INVALID_QUERY', 'Invalid storage cursor.');
+    const page = await this.env.MEDIA.list({ limit: 100, cursor, include: ['httpMetadata'] });
+    const items: StoredMediaSource[] = [];
+    for (let offset = 0; offset < page.objects.length; offset += 8) {
+      const sources = await Promise.all(page.objects.slice(offset, offset + 8).map(object => this.storageSource(object)));
+      items.push(...sources.filter((source): source is StoredMediaSource => source !== null));
+    }
+    return { items, cursor: page.truncated ? page.cursor : null };
+  }
+  private async requireStoredSource(key: string): Promise<StoredMediaSource> {
+    if (typeof key !== 'string' || key.length > 1024) throw new ApiError(400, 'INVALID_INPUT', 'Supply a storage key.');
+    const object = await this.env.MEDIA.head(key), source = object && await this.storageSource(object);
+    if (!source) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'This stored object is not an importable media file.');
+    return source;
+  }
+  async importStoredMedia(key: string, etag: string, owner: Identity): Promise<MediaRecord> {
+    const source = await this.requireStoredSource(key);
+    if (typeof etag !== 'string' || source.etag !== etag) throw new ApiError(409, 'STORAGE_CONFLICT', 'The stored file changed. Rescan before importing.');
+    const existing = await this.getMedia(source.id);
+    if (existing) {
+      if (source.kind === 'managed') return existing;
+      const object = await this.env.MEDIA.head(existing.key);
+      if (object?.customMetadata?.mobImportDigest !== source.digest || object.size !== source.size) throw new ApiError(409, 'STORAGE_CONFLICT', 'The import ID is already occupied.');
+      return existing;
+    }
+    const prefix = await this.env.MEDIA.get(key, { onlyIf: { etagMatches: etag }, range: { offset: 0, length: Math.min(source.size, 4096) } });
+    if (!prefix || !('body' in prefix) || prefix.etag !== etag) {
+      if (prefix && 'body' in prefix) await prefix.body.cancel();
+      throw new ApiError(409, 'STORAGE_CONFLICT', 'The stored file changed. Rescan before importing.');
+    }
+    requireSignature(new Uint8Array(await prefix.arrayBuffer()), source.contentType);
+    const destination = `media/${source.id}/${source.filename}`;
+    if (source.kind !== 'managed') {
+      const copied = await this.env.MEDIA.head(destination);
+      if (copied && (copied.customMetadata?.mobImportDigest !== source.digest || copied.size !== source.size)) throw new ApiError(409, 'STORAGE_CONFLICT', 'The import destination is already occupied.');
+      if (!copied) {
+        const original = await this.env.MEDIA.get(key, { onlyIf: { etagMatches: etag } });
+        if (!original || !('body' in original) || original.etag !== etag) {
+          if (original && 'body' in original) await original.body.cancel();
+          throw new ApiError(409, 'STORAGE_CONFLICT', 'The stored file changed. Rescan before importing.');
+        }
+        const written = await this.env.MEDIA.put(destination, original.body, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: source.contentType }, customMetadata: { mobImportDigest: source.digest } });
+        if (!written) throw new ApiError(409, 'STORAGE_CONFLICT', 'The import destination changed. Retry before registering.');
+      }
+    } else if ((await this.env.MEDIA.head(key))?.etag !== etag) throw new ApiError(409, 'STORAGE_CONFLICT', 'The stored file changed. Rescan before importing.');
+    const record: MediaRecord = { id: source.id, key: destination, filename: source.filename, contentType: source.contentType, size: source.size, createdAt: source.createdAt, owner: owner.email, url: `${this.origin()}/media/${source.id}/${source.filename}` };
+    await this.writeRecord(recordKey(record.id), record);
+    return record;
+  }
+  async previewStoredMedia(key: string, request: Request): Promise<Response> {
+    const source = await this.requireStoredSource(key);
+    return this.readObject(source.key, source.filename, source.contentType, request);
+  }
   async listMedia(cursor?: string): Promise<{ items: MediaRecord[]; cursor: string | null }> {
     if (cursor !== undefined && (typeof cursor !== 'string' || !cursor || cursor.length > 2048)) throw new ApiError(400, 'INVALID_CURSOR', 'Invalid pagination cursor.');
     const listed = await this.env.MEDIA.list({ prefix: '.mob/media/', limit: 25, cursor });
@@ -340,12 +422,15 @@ export class MediaService {
     if (request.method !== 'GET' && request.method !== 'HEAD') throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Media supports GET and HEAD.');
     const record = await this.getMedia(id);
     if (!record) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media does not exist or its upload has not completed.');
-    const object = await this.env.MEDIA.head(record.key);
+    return this.readObject(record.key, record.filename, record.contentType, request);
+  }
+  private async readObject(key: string, filename: string, contentType: string, request: Request): Promise<Response> {
+    const object = await this.env.MEDIA.head(key);
     if (!object) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media object does not exist.');
     const headers = new Headers({
-      'Content-Type': record.contentType, 'X-Content-Type-Options': 'nosniff',
+      'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff',
       'Accept-Ranges': 'bytes', ETag: object.httpEtag, 'Last-Modified': object.uploaded.toUTCString(),
-      'Cache-Control': 'private, no-store', 'Content-Disposition': `inline; filename="${record.filename}"`,
+      'Cache-Control': 'private, no-store', 'Content-Disposition': `inline; filename="${filename}"`,
     });
     if (matchEtag(request.headers.get('if-none-match'), object.httpEtag)) return new Response(null, { status: 304, headers });
     let range: { offset: number; length: number } | undefined;
@@ -364,7 +449,7 @@ export class MediaService {
     }
     headers.set('Content-Length', String(range?.length ?? object.size));
     if (request.method === 'HEAD') return new Response(null, { headers });
-    const body = await this.env.MEDIA.get(record.key, range ? { range } : undefined);
+    const body = await this.env.MEDIA.get(key, range ? { range } : undefined);
     if (!body || !('body' in body)) throw new ApiError(404, 'MEDIA_NOT_FOUND', 'Media object does not exist.');
     return new Response(body.body, { status: range ? 206 : 200, headers });
   }

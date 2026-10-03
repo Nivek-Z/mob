@@ -200,6 +200,7 @@ GraphQL 读取按文章数量和源文件字节数共同分批，给 JSON 转义
 | 方法 | 路径 | 返回 / 保存位置 |
 | --- | --- | --- |
 | GET | `/api/site` | `{value}`；`config/site/settings.json` |
+| GET | `/api/activity` | 共用仓库活动：`{enabled,title,timezone,range,github}`；不接受查询参数 |
 | GET / PUT | `/api/admin/settings/site` | `{sha,value,mediaIds}` / `{sha,value,commitSha}` |
 | GET | `/api/themes` | 已启用的注册清单；包含默认主题和访客切换开关 |
 | GET / PUT | `/api/admin/themes` | `{sha,value}`；`frontend/themes.json`，修改需部署 |
@@ -209,6 +210,8 @@ GraphQL 读取按文章数量和源文件字节数共同分批，给 JSON 转义
 PUT 请求仅接受 `{sha,value,mediaIds?}`；新文件 sha=null，已存在文件使用其当前 blob SHA。配置与 `<name>.references.json` 同 commit 保存。JSON 最多 512 KiB，嵌套最多 40 层，引用最多 200 个对象。`CONFIG_CONFLICT` 表示仓库或目标文件已变化；保留输入并重新加载合并。可选主题 JSON Schema 在 Workers 内校验，仅支持本地片段 `$ref`，不执行主题代码。
 
 共用站点对象要求 `title/description/profile:{name,bio,avatar}/socials/friends`；链接项为 `{label,url}`，社交与友链允许 HTTP(S)、mailto。可选 navigation 数组包含 `{label,url}`，允许站内相对路径或 HTTP(S)。不接受用户名/密码 URL。更多非秘密字段可由核心扩展，不允许复制成主题专属社交/友链。
+
+可选 activity 配置控制所有主题的 GitHub 仓库热力图；只统计绑定仓库与分支，不统计个人全站贡献。显示区间、时区、五项统计与 ok/stale/unavailable/disabled 状态的定义见 [ACTIVITY.md](ACTIVITY.md)。读取失败不能伪装零活动，不返回提交消息、作者或凭据。
 
 ## 图床
 
@@ -220,7 +223,10 @@ PUT 请求仅接受 `{sha,value,mediaIds?}`；新文件 sha=null，已存在文�
 | PATCH | `/api/admin/gallery` | `{sha,items:[{id,title?,description?,categoryId?,tags?,isPublic?,isListed?}]}` |
 | POST | `/api/admin/gallery/items` | `{id,source?}`，幂等登记已完成 R2 对象；返回 `{item,sha,commitSha?}` |
 | DELETE | `/api/admin/gallery/items/:id` | `{sha}`；检查全部文章和配置后删除展示记录与对象 |
-| POST | `/api/admin/gallery/import` | `{cursor?}`，每次最多 25 个现有 R2 记录；返回 `{imported,cursor,sha,commitSha?}` |
+| POST | `/api/admin/gallery/import` | `{cursor?}`，每次最多 25 个已有上传记录；保留原 ID，返回 `{imported,cursor,sha,commitSha?}` |
+| GET | `/api/admin/gallery/storage` | `{cursor?}` 查询；扫描每页最多 100 个 R2 键，返回未登记的受支持素材 `{items,cursor}` |
+| GET / HEAD | `/api/admin/gallery/storage/file?key=...` | 已发现素材的私有预览，支持 Range/ETag；拒绝内部和不支持的文件 |
+| POST | `/api/admin/gallery/storage/import` | `{key,etag}`；校验当前对象并幂等纳入，返回 `{item,sha,commitSha?}` |
 | GET / PUT | `/api/admin/gallery/categories` | `{sha,value}`，写回 `config/gallery/categories.json` |
 
 列表参数为 `category/q/limit/offset`；limit 1–100 默认 40，offset 0–1000。管理界面每页 24 项。索引 `content/gallery/items.json` 最多 1000 项、512 KiB；一次 PATCH 最多 100 项，成功或失败整个提交保持一致。
@@ -230,6 +236,8 @@ source 为 editor/gallery/theme/import，默认为 gallery；editor 默认归入
 分类 ID唯一；保留 `article-images`、`gallery` 两个默认 ID，可自由改显示名称。移除仍有项目的分类返回 `CATEGORY_IN_USE`。直接用旧 media DELETE 删除已登记项目返回 `GALLERY_MANAGED`，应使用图库删除接口。
 
 图库登记失败可重试同一 ID。删除先撤销文本公开记录，再删除 R2；后者失败可从已有媒体导入继续处理。被文章（含草稿）或任何配置（含停用主题）引用时返回 `MEDIA_IN_USE`，details 给出 articles/configs。
+
+R2 有字节不代表已经进入 GitHub 图床索引。storage 扫描只读，不自动登记或公开；排除 `.mob/`、`cache/`、进行中的上传与不支持的类型。某页 items 为空但 cursor 非空时应继续扫描。候选包含 key/etag/id/filename/contentType/size/createdAt/kind，kind 为 managed/theme/legacy。managed 保留原 ID；theme/legacy 创建有独立 ID 的受管理副本，保留原对象和链接。纳入时校验文件头及 ETag，对象变化返回 STORAGE_CONFLICT；默认私有不展示。复制完成而登记失败可重试，不重复复制。此接口仅管理员可用。
 
 ## 音频与媒体种子
 

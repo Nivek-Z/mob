@@ -23,6 +23,7 @@ configs 是主题自定义的文档数组，每项含 `id`、`label`、`path`，
 ## 公共接口
 
 - `/api/site` 与 `/api/admin/settings/site`：共用资料、社交链接、友链和导航。
+- `/api/activity`：绑定仓库与分支的按日提交统计；设置属于公共资料的 `activity`。主题自行呈现热力图与统计卡片，遵守 [ACTIVITY.md](ACTIVITY.md) 的缺失/缓存状态和日期口径。
 - `/api/themes`：可用主题、默认主题；访客选择使用 theme 查询参数和 mob-layout Cookie。
 - `/api/themes/<id>/config/<document>` 与 `/api/admin/themes/<id>/config/<document>`：读写主题配置。
 - `/api/posts`、`/api/admin/posts`：核心文章模型与封面。

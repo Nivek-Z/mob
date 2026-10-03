@@ -740,6 +740,178 @@ paths:
           description: "Invalid range. Content-Range: bytes */size."
         default:
           $ref: "#/components/responses/Error"
+  /api/activity:
+    get:
+      operationId: repositoryActivity
+      summary: Daily commits and interval statistics for the configured repository and branch
+      description: No query overrides. Reads shared GitHub activity config before using optional R2
+        aggregate cache. Failed reads never become zero activity; stale snapshots retain their
+        own date range.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ActivityResult"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery/storage:
+    get:
+      operationId: discoverStoredMedia
+      summary: Discover supported unregistered R2 media without mutating GitHub
+      description: Scans up to 100 keys per page. Empty items with a non-null cursor still require
+        another page. Excludes internal caches/metadata and unfinished uploads.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 4096
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - items
+                      - cursor
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/StoredMediaSource"
+                      cursor:
+                        type:
+                          - string
+                          - "null"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery/storage/file:
+    get:
+      operationId: previewStoredMedia
+      summary: Private preview of an eligible R2 media source
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 1024
+        - name: Range
+          in: header
+          schema:
+            type: string
+        - name: If-None-Match
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Media bytes; private, no-store
+        "206":
+          description: Requested byte range
+        "304":
+          description: Unchanged; no body
+        "416":
+          description: Invalid byte range
+        default:
+          $ref: "#/components/responses/Error"
+    head:
+      operationId: headStoredMedia
+      summary: Private preview of an eligible R2 media source
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 1024
+        - name: If-None-Match
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Media metadata; no body
+        "304":
+          description: Unchanged; no body
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery/storage/import:
+    post:
+      operationId: adoptStoredMedia
+      summary: Idempotently adopt a current R2 object into the private GitHub gallery
+      description: Managed uploads keep their ID. Theme/legacy sources are signature-checked and
+        copied to a managed immutable object; originals remain. GitHub registration may be
+        retried after copying succeeds. Changed source or occupied destination returns
+        STORAGE_CONFLICT.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - key
+                - etag
+              properties:
+                key:
+                  type: string
+                  maxLength: 1024
+                etag:
+                  type: string
+                  maxLength: 200
+              additionalProperties: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - item
+                      - sha
+                    properties:
+                      item:
+                        $ref: "#/components/schemas/GalleryItem"
+                      sha:
+                        type:
+                          - string
+                          - "null"
+                      commitSha:
+                        type: string
+        default:
+          $ref: "#/components/responses/Error"
   /api/site:
     get:
       operationId: siteSettings
@@ -1360,6 +1532,192 @@ components:
         format: uri
         description: Must equal SITE_ORIGIN; browsers set it automatically.
   schemas:
+    ActivityConfig:
+      type: object
+      required:
+        - enabled
+        - title
+        - days
+        - timezone
+        - github
+      properties:
+        enabled:
+          type: boolean
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        days:
+          type: integer
+          minimum: 30
+          maximum: 366
+        timezone:
+          type: string
+          maxLength: 100
+          description: Valid IANA timezone, e.g. Asia/Hong_Kong
+        github:
+          type: object
+          required:
+            - enabled
+            - title
+          properties:
+            enabled:
+              type: boolean
+            title:
+              type: string
+              minLength: 1
+              maxLength: 100
+          additionalProperties: false
+      additionalProperties: false
+      description: Optional shared config/site/settings.json activity field. Absent config defaults
+        to disabled.
+    ActivityResult:
+      type: object
+      required:
+        - enabled
+        - title
+        - timezone
+        - range
+        - github
+      properties:
+        enabled:
+          type: boolean
+        title:
+          type: string
+        timezone:
+          type: string
+        range:
+          type: object
+          required:
+            - from
+            - to
+            - days
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+            days:
+              type: integer
+              minimum: 30
+              maximum: 366
+        github:
+          type: object
+          required:
+            - title
+            - repository
+            - branch
+            - url
+            - status
+            - updatedAt
+            - daily
+            - stats
+          properties:
+            title:
+              type: string
+            repository:
+              type: string
+            branch:
+              type: string
+            url:
+              type: string
+              format: uri
+            status:
+              type: string
+              enum:
+                - ok
+                - stale
+                - unavailable
+                - disabled
+            updatedAt:
+              type:
+                - string
+                - "null"
+              format: date-time
+            daily:
+              type:
+                - array
+                - "null"
+              items:
+                type: object
+                required:
+                  - date
+                  - count
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  count:
+                    type: integer
+                    minimum: 0
+            stats:
+              type:
+                - object
+                - "null"
+              required:
+                - total
+                - activeDays
+                - peakDaily
+                - longestStreakDays
+                - currentStreakDays
+              properties:
+                total:
+                  type: integer
+                  minimum: 0
+                activeDays:
+                  type: integer
+                  minimum: 0
+                peakDaily:
+                  type: integer
+                  minimum: 0
+                longestStreakDays:
+                  type: integer
+                  minimum: 0
+                currentStreakDays:
+                  type: integer
+                  minimum: 0
+    StoredMediaSource:
+      type: object
+      required:
+        - key
+        - etag
+        - id
+        - filename
+        - contentType
+        - size
+        - createdAt
+        - kind
+        - digest
+      properties:
+        key:
+          type: string
+          maxLength: 1024
+        etag:
+          type: string
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum:
+            - managed
+            - theme
+            - legacy
+        digest:
+          type: string
+          description: Deterministic source fingerprint, not a credential
     Post:
       type: object
       required:

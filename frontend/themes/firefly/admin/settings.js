@@ -1,7 +1,7 @@
 (function () {
   const api = window.Mob.api; const select = document.getElementById('settings-document'); const root = document.getElementById('settings-fields'); const raw = document.getElementById('settings-json'); const note = document.getElementById('settings-note');
   const documents = { site: '/api/admin/settings/site', appearance: '/api/admin/themes/firefly/config/appearance', themes: '/api/admin/themes', categories: '/api/admin/gallery/categories' };
-  const names = { title: '标题', description: '说明', profile: '个人资料', name: '名称', bio: '个人简介', avatar: '头像', socials: '社交链接', friends: '友链', navigation: '全站导航', label: '显示名称', url: '链接', hero: '首屏', eyebrow: '眉题', occupation: '身份描述', cover: '首屏封面', images: '展示图片', stickers: '贴纸', text: '文字', x: '横向位置 %', y: '纵向位置 %', rotation: '旋转角度', size: '大小 px', motion: '动效', enabled: '启用', rain: '雨幕', ticker: '滚动标语', heroScrollVh: '首屏滚动距离 vh', storyScrollVh: '故事滚动距离 vh', guide: '导航展示', introTitle: '介绍标题', introText: '介绍文案', journey: '旅程', wishes: '轮播祝福', heading: '章节标题', scenes: '故事章节', image: '图片', dialogue: '对话向导', welcome: '欢迎语', outro: '结尾', subtitle: '副标题', defaultTheme: '默认主题 ID', allowVisitorSwitch: '允许访客切换', themes: '主题列表', items: '分类', id: '唯一 ID', root: '目录', copy: '其他文字（CSS 选择器）', styles: '自定义样式（CSS 选择器 → 属性）' };
+  const names = { title: '标题', description: '说明', profile: '个人资料', name: '名称', bio: '个人简介', avatar: '头像', socials: '社交链接', friends: '友链', navigation: '全站导航', label: '显示名称', url: '链接', hero: '首屏', eyebrow: '眉题', occupation: '身份描述', cover: '首屏封面', images: '展示图片', stickers: '贴纸', text: '文字', x: '横向位置 %', y: '纵向位置 %', rotation: '旋转角度', size: '大小 px', motion: '动效', enabled: '启用', rain: '雨幕', ticker: '滚动标语', heroScrollVh: '首屏滚动距离 vh', storyScrollVh: '故事滚动距离 vh', guide: '导航展示', introTitle: '介绍标题', introText: '介绍文案', journey: '旅程', wishes: '轮播祝福', heading: '章节标题', scenes: '故事章节', image: '图片', dialogue: '对话向导', welcome: '欢迎语', outro: '结尾', subtitle: '副标题', defaultTheme: '默认主题 ID', allowVisitorSwitch: '允许访客切换', themes: '主题列表', items: '分类', id: '唯一 ID', root: '目录', copy: '其他文字（CSS 选择器）', styles: '自定义样式（CSS 选择器 → 属性）', activity: '仓库活动（所有主题共用）', github: 'GitHub 提交活动', days: '显示天数（30–366）', timezone: '统计时区（如 Asia/Hong_Kong）' };
   let current, endpoint, dirty = false, saving = false, uploading = 0, documentKey = select.value;
   function syncRaw() { raw.value = JSON.stringify(current.value, null, 2); dirty = true; }
   function render() {
@@ -18,7 +18,7 @@
       }
       const label = document.createElement('label'); label.className = 'field'; label.append(document.createTextNode(names[key] || key));
       const input = document.createElement(typeof value === 'string' && value.length > 140 ? 'textarea' : 'input');
-      input.type = typeof value === 'boolean' ? 'checkbox' : typeof value === 'number' ? 'number' : 'text'; input.step = 'any';
+      input.type = typeof value === 'boolean' ? 'checkbox' : typeof value === 'number' ? 'number' : 'text'; input.step = 'any'; if (key === 'days' && path.includes('activity')) { input.min = '30'; input.max = '366'; input.step = '1'; }
       if (input.type === 'checkbox') input.checked = value; else input.value = value ?? '';
       const set = value => { let node = current.value; for (const segment of path.slice(0, -1)) node = node[segment]; node[path.at(-1)] = value; syncRaw(); };
       input.addEventListener('input', () => set(input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value)); label.append(input); parent.append(label);

@@ -23,6 +23,8 @@ const pendingCommits = new Map<string, { parent: string; tree: string }>();
 const blobDigest = (text: string) => createHash('sha1').update('blob ' + Buffer.byteLength(text) + '\0').update(text).digest('hex');
 function storeFile(filename: string, content: string) { files.set(filename, { sha: blobDigest(content), content }); }
 let upstreamStatus = 0;
+let commitStatus = 0;
+let commitRequests = 0;
 let githubRequests = 0;
 let mf: Miniflare;
 let jwt: string;
@@ -99,6 +101,10 @@ beforeAll(async () => {
         return upstream({ data: { repository } });
       }
       if (url.pathname.includes('/git/ref/heads/')) return upstream({ object: { type: 'commit', sha: head } });
+      if (url.pathname === '/repos/owner/blog/commits') {
+        commitRequests++; expect(url.searchParams.get('sha')).toBe(head);
+        return commitStatus ? upstream({}, commitStatus) : upstream([{ sha: digest('activity-commit'), commit: { committer: { date: new Date().toISOString() } } }]);
+      }
       if (url.pathname.includes('/git/blobs/')) { const sha = url.pathname.split('/').pop(); const file = [...files.values()].find(file => file.sha === sha); return file ? upstream({ encoding: 'base64', content: Buffer.from(file.content).toString('base64') }) : upstream({}, 404); }
       if (url.pathname.includes('/git/trees/')) return upstream({ sha: digest('base-tree'), truncated: false, tree: [...files].map(([path, file]) => ({ path, type: 'blob', sha: file.sha, size: Buffer.byteLength(file.content) })) });
       if (url.pathname.includes('/git/commits/')) return upstream({ sha: head, tree: { sha: digest('base-tree') } });
@@ -137,7 +143,7 @@ beforeAll(async () => {
   await mf.ready;
 }, 20000);
 beforeEach(() => {
-  files.clear(); revision++; head = digest(String(revision)); rejectRef = false; pendingTrees.clear(); pendingCommits.clear(); upstreamStatus = 0; githubRequests = 0;
+  files.clear(); revision++; head = digest(String(revision)); rejectRef = false; pendingTrees.clear(); pendingCommits.clear(); upstreamStatus = 0; githubRequests = 0; commitStatus = 0; commitRequests = 0;
   storePost('public', 'published'); storePost('private', 'draft');
   for (const filename of ['config/site/settings.json', 'config/gallery/categories.json', 'content/gallery/items.json', 'frontend/themes.json', 'frontend/themes/firefly/theme.json', 'frontend/themes/firefly/config/appearance.json', 'frontend/themes/firefly/config/appearance.schema.json', 'frontend/themes/paper/theme.json', 'frontend/themes/paper/config/reading.json', 'frontend/themes/paper/config/reading.schema.json']) storeFile(filename, readFileSync(filename, 'utf8'));
   for (const theme of ['firefly', 'paper']) {
@@ -150,6 +156,55 @@ beforeEach(() => {
 afterAll(async () => { await mf?.dispose(); }, 30000);
 
 describe('Cloudflare runtime integration', () => {
+  it('aggregates activity through native fetch/R2, labels stale results and respects live disabling', async () => {
+    const bucket = await mf.getR2Bucket('MEDIA');
+    const cached = await bucket.list({ prefix: 'cache/github-activity/' }); await bucket.delete(cached.objects.map(object => object.key));
+    const response = await request('/api/activity'); expect(response.status).toBe(200); expect(response.headers.get('Cache-Control')).toContain('no-store');
+    const activity = (await data(response)).data;
+    expect(activity.github).toMatchObject({ status: 'ok', repository: 'owner/blog', stats: { total: 1, activeDays: 1 } });
+    expect(activity.github.daily).toHaveLength(365); expect(Object.keys(activity.github.daily[0]).sort()).toEqual(['count', 'date']);
+    await request('/api/activity'); expect(commitRequests).toBe(1);
+    const stored = (await bucket.list({ prefix: 'cache/github-activity/' })).objects[0];
+    const value = await (await bucket.get(stored.key))!.json() as any;
+    value.attemptedAt -= 660000; value.snapshot.fetchedAt -= 660000; await bucket.put(stored.key, JSON.stringify(value));
+    commitStatus = 502;
+    const stale = (await data(await request('/api/activity'))).data;
+    expect(stale.github.status).toBe('stale'); expect(stale.github.stats.total).toBe(1);
+    expect(stale.range).toEqual(activity.range);
+    const settings = (await data(await request('/api/admin/settings/site', 'GET', undefined, true))).data;
+    settings.value.activity.enabled = false;
+    expect((await request('/api/admin/settings/site', 'PUT', { sha: settings.sha, value: settings.value }, true)).status).toBe(200);
+    const disabled = (await data(await request('/api/activity'))).data;
+    expect(disabled.github).toMatchObject({ status: 'disabled', daily: null, stats: null }); expect(commitRequests).toBe(2);
+    expect((await request('/api/activity?repo=other')).status).toBe(400);
+  });
+  it('discovers real R2 theme seeds and imports a private copy without changing original URLs', async () => {
+    const original = await request('/theme-media/firefly/hero.avif'); expect(original.status).toBe(200);
+    expect((await request('/api/admin/gallery/storage')).status).toBe(401);
+    let cursor: string | null = null, source: any;
+    do {
+      const page: { items: any[]; cursor: string | null } = (await data(await request('/api/admin/gallery/storage' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), 'GET', undefined, true))).data;
+      source ||= page.items.find((item: any) => item.kind === 'theme' && item.key.endsWith('/hero.avif')); cursor = page.cursor;
+    } while (cursor && !source);
+    expect(source).toBeDefined();
+    const previewURL = '/api/admin/gallery/storage/file?key=' + encodeURIComponent(source.key);
+    expect((await request(previewURL)).status).toBe(401);
+    const preview = await request(previewURL, 'GET', undefined, true, { Range: 'bytes=0-15' });
+    expect(preview.status).toBe(206); expect((await preview.arrayBuffer()).byteLength).toBe(16);
+    expect(preview.headers.get('Cache-Control')).toContain('no-store');
+    expect((await request('/api/admin/gallery/storage/import', 'POST', { key: source.key, etag: source.etag }, true, { Origin: 'https://evil.example' })).status).toBe(403);
+    const imported = (await data(await request('/api/admin/gallery/storage/import', 'POST', { key: source.key, etag: source.etag }, true))).data;
+    expect(imported.item).toMatchObject({ id: source.id, isPublic: false, isListed: false });
+    const url = new URL(imported.item.url).pathname;
+    expect((await request(url)).status).toBe(404);
+    expect((await request('/api/admin/media/' + source.id + '/file', 'HEAD', undefined, true)).status).toBe(200);
+    const repeat = (await data(await request('/api/admin/gallery/storage/import', 'POST', { key: source.key, etag: source.etag }, true))).data;
+    expect(repeat.item.id).toBe(source.id);
+    expect((await request('/api/admin/gallery', 'PATCH', { sha: repeat.sha, items: [{ id: source.id, isPublic: true, isListed: true }] }, true)).status).toBe(200);
+    const copy = await request(url); expect(copy.status).toBe(200); expect(new Uint8Array(await copy.arrayBuffer())).toEqual(new Uint8Array(await original.arrayBuffer()));
+    expect((await request('/theme-media/firefly/hero.avif')).status).toBe(200);
+    expect((await request('/api/admin/gallery/storage/file?key=.mob/private.png', 'GET', undefined, true)).status).toBe(404);
+  });
   it('checks liveness without depending on GitHub', async () => {
     expect((await data(await request('/api/health'))).data.status).toBe('ok');
     expect(githubRequests).toBe(0);
