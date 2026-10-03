@@ -175,7 +175,7 @@ describe("public configuration reference snapshot cache", () => {
     const result = await settings.readTheme("firefly", "appearance", true);
     expect(result).toMatchObject({
       sha: "b".repeat(40),
-      mediaIds: [id],
+      mediaIds: [],
       declaration: { id: "appearance" },
     });
     expect(

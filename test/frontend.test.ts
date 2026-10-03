@@ -91,4 +91,45 @@ describe('theme frontends', () => {
     const task = win.Mob.uploadTask(new win.File(['png'], 'clip.png', { type: 'image/png' }), 'editor');
     await expect(task()).rejects.toThrow('temporary write failure'); expect(await task()).toEqual(record); expect(binary).toHaveBeenCalledTimes(1); dom.window.close();
   });
+  it('reuses a completed ID when cleanup removed its session before the client received completion', async () => {
+    const { dom, win } = fixture('frontend/themes/firefly/admin/index.html', 'frontend/core/upload.js');
+    const id = '11111111-1111-4111-8111-111111111111';
+    const item = { id, filename: 'clip.png', contentType: 'image/png', size: 3, createdAt: '2026-10-02T00:00:00.000Z', url: 'https://blog.example.com/media/' + id + '/clip.png' };
+    let lookups = 0, creates = 0;
+    win.Mob.api = vi.fn(async (path, options) => {
+      if (path === '/api/admin/uploads') { creates++; return { id, mode: 'single' }; }
+      if (path === '/api/admin/gallery/items') { expect(options.json.id).toBe(id); return { item }; }
+      if (++lookups === 1) throw new Error('Network interrupted');
+      throw Object.assign(new Error('Session retired'), { code: 'UPLOAD_NOT_FOUND' });
+    });
+    const task = win.Mob.uploadTask(new win.File(['png'], 'clip.png', { type: 'image/png' }), 'editor');
+    await expect(task()).rejects.toThrow('Network');
+    expect(await task()).toMatchObject(item); expect(creates).toBe(1);
+    dom.window.close();
+  });
+  it('starts a new session when an incomplete upload expires, while retaining the original file for retry', async () => {
+    const { dom, win } = fixture('frontend/themes/firefly/admin/index.html', 'frontend/core/upload.js');
+    const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+    const record = { id: ids[1], filename: 'clip.png', contentType: 'image/png', url: 'https://blog.example.com/media/' + ids[1] + '/clip.png' };
+    let creates = 0, lookups = 0; const sent: string[] = [];
+    class XHR {
+      upload = {}; responseText = JSON.stringify({ data: record }); status = 200; onload?: () => void;
+      open(_method: string, path: string) { sent.push(path); } setRequestHeader() {} send() { this.onload?.(); }
+    }
+    win.XMLHttpRequest = XHR as unknown as typeof win.XMLHttpRequest;
+    win.Mob.api = vi.fn(async (path, options) => {
+      if (path === '/api/admin/uploads') return { id: ids[creates++], mode: 'single' };
+      if (path === '/api/admin/gallery/items') {
+        if (options.json.id === ids[0]) throw Object.assign(new Error('Not completed'), { code: 'MEDIA_NOT_READY' });
+        return { item: record };
+      }
+      if (++lookups === 1) throw new Error('Network interrupted');
+      throw Object.assign(new Error('Expired'), { code: 'UPLOAD_EXPIRED' });
+    });
+    const task = win.Mob.uploadTask(new win.File(['png'], 'clip.png', { type: 'image/png' }), 'gallery');
+    await expect(task()).rejects.toThrow('Network');
+    expect(await task()).toEqual(record); expect(creates).toBe(2);
+    expect(sent).toEqual(['/api/admin/uploads/' + ids[1] + '/body']);
+    dom.window.close();
+  });
 });

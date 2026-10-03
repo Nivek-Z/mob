@@ -8,13 +8,16 @@
 | 个人资料、社交链接、友链、站点信息、导航 | GitHub `config/site/` | 共用一份，不按主题复制 |
 | 仓库活动的开关、标题、时区与显示天数 | GitHub `config/site/settings.json` 的 `activity` | 核心通用配置；主题决定视觉样式 |
 | 图库分类 | GitHub `config/gallery/` | 核心模型，主题共享 |
-| 图库说明、分类归属、公开与展示状态 | GitHub `content/gallery/` | 核心图库模型 |
+| 已登记媒体元数据、图库说明、分类归属、公开与展示状态 | GitHub `content/gallery/` | 包含媒体 ID、文件名、MIME、大小、创建时间和稳定 URL |
 | 注册清单、默认主题 | GitHub `frontend/themes.json` | 主题切换声明 |
 | 主题配置、默认值、校验声明 | GitHub `frontend/themes/<id>/` | 结构与 UI由主题自己定义 |
 | 上传图片、音频、视频字节 | 私有 R2 | 通过 Worker 稳定 URL访问 |
-| 上传会话、完整性记录、可丢弃缓存 | R2 | 运行状态，不代替文本配置 |
+| 上传会话、分片进度、完成/取消状态 | R2 `.mob/uploads/` | 临时运行状态；进行中上传依赖它们 |
+| 已完成媒体辅助记录、文章/引用/活动缓存 | R2 `.mob/media/` 等 | 已登记媒体可从 Git 恢复，缓存可重建 |
 
 GitHub 保留文章与全部文本配置；不能把“对象存储”扩大为把正文和配置迁入 R2。既有文章保持原文。
+
+辅助记录恢复、上传状态清理及删除行为见 [MEDIA-STORAGE.md](MEDIA-STORAGE.md)。已登记元数据可以重建 R2 媒体记录，不能重建已丢失的用户文件字节。
 
 ## 图床
 

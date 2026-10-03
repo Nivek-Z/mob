@@ -55,7 +55,7 @@ R2 桶不打开公共访问，也不配置可绕过 Worker 的公共对象域名
 
 ## 跨服务写入协调
 
-文章 PUT/DELETE 与媒体 DELETE 经过同一个全局 Durable Object 串行协调，避免两个请求分别操作 GitHub 与 R2 时，出现“文章刚引用媒体、另一个请求同时删除媒体”的情况。SHA 冲突检查仍然保留，协调器不会代替编辑内容合并。
+文章、配置、主题注册、图库写操作、媒体删除和上传状态清理经过同一个全局 Durable Object 串行协调，避免两个请求分别操作 GitHub 与 R2 时，出现“文章刚引用媒体、另一个请求同时删除媒体”的情况。SHA 冲突检查仍然保留，协调器不会代替编辑内容合并。
 
 绑定为 MUTATIONS → BlogMutations，wrangler.jsonc 的 exports 声明 BlogMutations 为 durable-object、storage 为 sqlite；Wrangler 在部署时管理该导出的生命周期，使用[官方声明式 exports 配置](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)。无需前端知道这个对象，也不新增 HTTP 接口。缺少绑定时写操作返回 503 COORDINATOR_NOT_CONFIGURED。
 
@@ -77,7 +77,7 @@ GitHub PAT 不到浏览器，R2 不需要暴露 S3 密钥。Access 在边缘拦�
 
 ## 发布代码与文章
 
-前端源码或 Worker 代码提交后，Cloudflare Workers Builds 拉取同一仓库，调用 deploy:cloudflare。wrapper 同步资源，显式执行 scripts/build.mjs 读取 mob.config.json 产出静态资源，再执行 wrangler deploy --no-build，最后同步 Builds 自身的声明。
+前端源码或 Worker 代码提交后，Cloudflare Workers Builds 拉取同一仓库，调用 deploy:cloudflare。wrapper 同步资源，显式执行 scripts/build.mjs 读取 mob.config.json 产出静态资源，再执行 wrangler deploy（Wrangler 按 build.command 再次构建），最后同步 Builds 自身的声明。
 
 文章接口直接在运行时读取 GitHub，因此新文章不依赖前端重新构建才可阅读。Workers Builds 可能也会因文章 commit 触发构建，这是部署触发配置决定的，不改变文章 API 的数据路径。
 
@@ -85,6 +85,6 @@ GitHub PAT 不到浏览器，R2 不需要暴露 S3 密钥。Access 在边缘拦�
 
 公共资料、导航、社交和友链放在 config/site/settings.json。各主题自己声明 config 文档和 UI；SettingsService 只按安全路径、SHA、可选 Schema与媒体引用处理。配置与 references 侧文件使用同一个 Git tree/commit，并通过非强制 ref 更新防止覆盖并发提交。
 
-图库的 title/description/category/tags/isPublic/isListed 位于 GitHub content/gallery/items.json；R2记录只描述上传对象与完整性。文章/配置/图库写入和对象删除共用 Mutations 队列。上传完成后登记失败可重试，图库删除先撤销文本公开记录，再删除 R2对象。
+图库的 ID、filename、url、contentType、size、createdAt 和 title/description/category/tags/isPublic/isListed 位于 GitHub content/gallery/items.json。R2 辅助媒体记录缺失时从 Git 恢复；上传会话与分片进度仍是 R2 临时状态。见 [媒体存储与清理](MEDIA-STORAGE.md)。文章/配置/图库写入和对象删除共用 Mutations 队列。上传完成后登记失败可重试，图库删除先撤销文本公开记录，再删除 R2对象。
 
 主题路由读取已部署清单，访客通过 theme 参数与 mob-layout Cookie选择；返回 HTML使用 private/no-store 和 Vary: Cookie。配置值读取仓库最新文件；注册清单、源码、静态入口仍需部署。管理资产映射到 /admin/assets/<id>/，同时保护原始主题管理路径。

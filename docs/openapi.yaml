@@ -372,6 +372,52 @@ paths:
                 additionalProperties: false
         default:
           $ref: "#/components/responses/Error"
+  /api/admin/uploads/cleanup:
+    post:
+      operationId: cleanupUploads
+      summary: Retire expired upload state while retaining completed media
+      description: Scans at most four upload directories per page. Pass the returned cursor until null. Newly cancelled uploads retain their tombstone for one day. Requires the mutation coordinator; no scheduled cleanup is configured.
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cursor:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+              additionalProperties: false
+      responses:
+        "200":
+          description: Completed files, media records and Git gallery entries are retained
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [cleaned, expired, cursor]
+                    properties:
+                      cleaned:
+                        type: integer
+                        minimum: 0
+                      expired:
+                        type: integer
+                        minimum: 0
+                      cursor:
+                        type: [string, "null"]
+                    additionalProperties: false
+                additionalProperties: false
+        default:
+          $ref: "#/components/responses/Error"
   /api/admin/uploads/{id}:
     parameters:
       - $ref: "#/components/parameters/Id"
@@ -1978,7 +2024,6 @@ components:
         - filename
         - contentType
         - size
-        - owner
         - createdAt
         - url
       properties:
@@ -2010,6 +2055,7 @@ components:
           maximum: 5368709120
         owner:
           type: string
+          description: Upload subject or importer email when known; may be absent when recovered from Git.
         createdAt:
           type: string
           format: date-time
@@ -2127,6 +2173,7 @@ components:
         value: {}
         mediaIds:
           type: array
+          description: Additional references not detected from the current configuration URLs.
           maxItems: 200
           items:
             type: string
@@ -2145,6 +2192,7 @@ components:
         value: &a1 {}
         mediaIds:
           type: array
+          description: Additional references only; automatic references are derived from value during saving.
           items:
             type: string
             format: uuid

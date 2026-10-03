@@ -23,12 +23,16 @@
     slugManual = false,
     previewTimer,
     uploadCounter = 0,
-    loading = false;
+    loading = true,
+    deleting = false;
   const say = (text) => {
     note.textContent = text;
   };
   function state() {
-    fields.slug.disabled = saving;
+    form.inert = loading || deleting;
+    Object.values(fields).forEach(field => { field.disabled = loading || deleting; });
+    fields.slug.disabled = loading || saving || deleting;
+    ['file', 'cover-file'].forEach(id => { document.getElementById(id).disabled = loading || saving || deleting; });
     ui.setDirty(dirty, saving || uploading > 0 || loading);
     form.querySelectorAll(".save-bar button").forEach((b) => {
       b.disabled = saving || uploading > 0 || loading;
@@ -190,6 +194,7 @@
   }
   const linkText = (name) => name.replace(/[\[\]\\\r\n]/g, " ");
   function enqueue(blobs, cover = false) {
+    if (loading || saving || deleting) return;
     blobs.forEach((blob) => {
       const row = node("div", undefined, "upload-row"),
         label = node("span"),
@@ -219,7 +224,7 @@
         changed(true);
       });
       async function attempt() {
-        if (running) return;
+        if (running || loading || saving || deleting) return;
         running = true;
         retry.hidden = true;
         cancel.disabled = true;
@@ -415,12 +420,13 @@
   document.getElementById("remove").addEventListener("click", async () => {
     if (
       saving ||
+      loading ||
       uploading ||
       !editing ||
       !confirm("删除这篇文章？已上传素材保留在图床。")
     )
       return;
-    saving = true;
+    saving = true; deleting = true;
     state();
     try {
       await api("/api/admin/posts/" + encodeURIComponent(editing), {
@@ -434,7 +440,7 @@
     } catch (e) {
       say(ui.humanError(e));
     } finally {
-      saving = false;
+      saving = false; deleting = false;
       state();
     }
   });
@@ -443,6 +449,7 @@
   ["post-search", "post-filter"].forEach((id) =>
     document.getElementById(id).addEventListener("input", renderList),
   );
+  state();
   ui.session.then(async (session) => {
     if (!session) {
       form.hidden = true;
@@ -452,5 +459,5 @@
     await loadList();
     const slug = new URLSearchParams(location.search).get("slug");
     if (slug) await open(slug, true);
-  });
+  }).catch(error => say(ui.humanError(error))).finally(() => { loading = false; state(); });
 })();

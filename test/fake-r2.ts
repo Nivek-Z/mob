@@ -61,6 +61,17 @@ export class FakeR2Bucket {
   async delete(key: string | string[]): Promise<void> { for (const name of Array.isArray(key) ? key : [key]) this.objects.delete(name); }
   async list(options: R2ListOptions = {}): Promise<R2Objects> {
     const keys = [...this.objects.keys()].filter(key => key.startsWith(options.prefix ?? '')).sort();
+    if (options.delimiter) {
+      const entries = [...new Set(keys.map(key => {
+        const end = key.indexOf(options.delimiter!, (options.prefix ?? '').length);
+        return end < 0 ? key : key.slice(0, end + options.delimiter!.length);
+      }))];
+      const start = options.cursor ? entries.findIndex(key => key > options.cursor!) : 0;
+      const selected = start < 0 ? [] : entries.slice(start, start + (options.limit ?? 1000));
+      const truncated = start >= 0 && start + selected.length < entries.length;
+      return { objects: selected.filter(key => this.objects.has(key)).map(key => this.object(key, this.objects.get(key)!)),
+        delimitedPrefixes: selected.filter(key => !this.objects.has(key)), truncated, ...(truncated ? { cursor: selected.at(-1)! } : {}) } as R2Objects;
+    }
     const offset = options.cursor ? Number(options.cursor) : 0;
     const slice = keys.slice(offset, offset + (options.limit ?? 1000)); const truncated = offset + slice.length < keys.length;
     return { objects: slice.map(key => this.object(key, this.objects.get(key)!)), truncated, ...(truncated ? { cursor: String(offset + slice.length) } : {}), delimitedPrefixes: [] } as R2Objects;

@@ -1,5 +1,7 @@
 import { type Env, type Identity, type MediaRecord, type UploadSession } from './types';
 import { ApiError, readBytes, requireId } from './http';
+import { GitHubClient } from './github';
+import { GALLERY_INDEX_PATH, mediaMetadata } from './media-metadata';
 
 const PART_SIZE = 8 * 1024 * 1024;
 const DEFAULT_LIMIT = 1024 * 1024 * 1024;
@@ -91,6 +93,7 @@ function parseRange(header: string, size: number): { offset: number; length: num
 }
 
 export class MediaService {
+  private galleryRecords?: Promise<unknown[]>;
   constructor(private readonly env: Env) {}
   private maxSize(): number {
     const configured = this.env.MAX_MEDIA_BYTES === undefined ? DEFAULT_LIMIT : Number(this.env.MAX_MEDIA_BYTES);
@@ -144,8 +147,12 @@ export class MediaService {
     throw new ApiError(409, 'UPLOAD_BUSY', 'The upload changed concurrently; retry the operation.');
   }
   private async assertActive(session: UploadSession): Promise<void> {
+    if (Date.parse(session.expiresAt) <= Date.now()) {
+      const state = await this.readRecord<UploadState>(stateKey(session.id));
+      if (state?.status === 'aborted' || state?.status === 'deleted') throw new ApiError(410, 'UPLOAD_CLOSED', 'This upload was cancelled or deleted.');
+      throw new ApiError(410, 'UPLOAD_EXPIRED', 'The upload session expired; create a new session.');
+    }
     if (await this.terminal(session.id)) throw new ApiError(410, 'UPLOAD_CLOSED', 'This upload was cancelled or deleted.');
-    if (Date.parse(session.expiresAt) <= Date.now()) throw new ApiError(410, 'UPLOAD_EXPIRED', 'The upload session expired; create a new session.');
   }
   private async ownedSession(id: string, identity: Identity): Promise<UploadSession> {
     requireId(id);
@@ -157,7 +164,7 @@ export class MediaService {
   async createUpload(input: { filename: string; contentType: string; size: number }, identity: Identity): Promise<UploadSession> {
     if (!input || typeof input !== 'object' || typeof input.contentType !== 'string') throw new ApiError(400, 'INVALID_INPUT', 'filename, contentType and size are required.');
     const contentType = input.contentType.trim().toLowerCase();
-    if (!Object.hasOwn(MIME_EXTENSIONS, contentType)) throw new ApiError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Allowed media types: JPEG, PNG, GIF, WebP, AVIF, MP4 and WebM.');
+    if (!Object.hasOwn(MIME_EXTENSIONS, contentType)) throw new ApiError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Allowed media types: JPEG, PNG, GIF, WebP, AVIF, MP4, WebM, MP3, WAV, Ogg and M4A.');
     if (!Number.isSafeInteger(input.size) || input.size < 1) throw new ApiError(400, 'INVALID_MEDIA_SIZE', 'size must be a positive integer in bytes.');
     if (input.size > this.maxSize()) throw new ApiError(413, 'MEDIA_TOO_LARGE', 'The file exceeds MAX_MEDIA_BYTES.');
     const filename = filenameFor(input.filename, contentType);
@@ -310,14 +317,83 @@ export class MediaService {
     }
     await this.env.MEDIA.delete([session.key, recordKey(id)]);
   }
+  /** Explicit, bounded administration; completed bytes and gallery entries are never removed. */
+  async cleanupUploads(cursor?: string): Promise<{ cleaned: number; expired: number; cursor: string | null }> {
+    if (cursor !== undefined && (typeof cursor !== 'string' || !cursor || cursor.length > 4096)) throw new ApiError(400, 'INVALID_CURSOR', 'Invalid pagination cursor.');
+    const page = await this.env.MEDIA.list({ prefix: '.mob/uploads/', delimiter: '/', limit: 4, cursor });
+    let cleaned = 0, expired = 0;
+    for (const prefix of page.delimitedPrefixes) {
+      const id = /^\.mob\/uploads\/([0-9a-f-]{36})\/$/.exec(prefix)?.[1];
+      if (!id) continue; requireId(id);
+      const session = await this.readRecord<UploadSession>(sessionKey(id));
+      const stateObject = await this.env.MEDIA.head(stateKey(id));
+      if (!stateObject) continue;
+      const state = await this.state(id);
+      const deadline = session ? Date.parse(session.expiresAt) : Date.parse(state.value.at) + SESSION_TTL;
+      if (!Number.isFinite(deadline) || deadline > Date.now()) continue;
+      if (state.value.status === 'active') {
+        // Retain the tombstone and session for a full additional day. Requests that
+        // were already in flight must expire before these recovery records vanish.
+        if (session) await this.abortUpload(id, { subject: session.owner, email: '' });
+        else await this.transition(id, 'aborted');
+        expired++;
+        continue;
+      }
+      if (state.value.status === 'aborted' && Date.parse(state.value.at) + SESSION_TTL > Date.now()) continue;
+      if (state.value.status === 'completed' && session && !await this.getMedia(id)) {
+        // Completion claimed the bytes but its metadata write may have failed.
+        const object = await this.env.MEDIA.head(session.key);
+        if (object) {
+          this.verifyStoredObject(object, session);
+          await this.preserveMedia({ id, key: session.key, filename: session.filename, contentType: session.contentType,
+            size: session.size, owner: session.owner, createdAt: session.createdAt, url: session.url });
+        }
+      }
+      // Delete parts first and the tombstone last, so a failed cleanup stays retryable.
+      // Listing parts is bounded by 640 entries at the hard 5 GiB limit.
+      let remaining: R2Objects;
+      do {
+        remaining = await this.env.MEDIA.list({ prefix: prefix + 'parts/', limit: 1000 });
+        if (remaining.objects.length) await this.env.MEDIA.delete(remaining.objects.map(object => object.key));
+      } while (remaining.truncated);
+      await this.env.MEDIA.delete(sessionKey(id));
+      await this.env.MEDIA.delete(stateKey(id));
+      cleaned++;
+    }
+    return { cleaned, expired, cursor: page.truncated ? page.cursor : null };
+  }
   async getMedia(id: string): Promise<MediaRecord | null> {
     requireId(id);
     const record = await this.readRecord<MediaRecord>(recordKey(id));
-    if (!record) return null;
-    if (record.id !== id || typeof record.filename !== 'string' || !/^[a-zA-Z0-9_-]+\.(jpg|png|gif|webp|avif|mp4|webm|mp3|wav|ogg|m4a)$/.test(record.filename) || record.key !== `media/${id}/${record.filename}` || !Object.hasOwn(MIME_EXTENSIONS, record.contentType) || !Number.isSafeInteger(record.size) || record.size < 1) {
+    if (!record) return this.registeredMedia(id);
+    mediaMetadata(record, id);
+    if (record.key !== `media/${id}/${record.filename}`) {
       throw new ApiError(503, 'MEDIA_STORAGE_ERROR', 'Stored media metadata is invalid.');
     }
     return record;
+  }
+  private async registeredMedia(id: string): Promise<MediaRecord | null> {
+    // Storage-only service instances can omit the repository binding.
+    if (!this.env.GITHUB_OWNER && !this.env.GITHUB_REPO) return null;
+    this.galleryRecords ??= (async () => {
+      const file = await new GitHubClient(this.env).readFile(GALLERY_INDEX_PATH);
+      if (!file) return [];
+      let value: { items?: unknown[] };
+      try { value = JSON.parse(file.content); } catch { throw new ApiError(503, 'INVALID_GALLERY', 'The gallery index is invalid.'); }
+      if (!value || !Array.isArray(value.items) || value.items.length > 1000) throw new ApiError(503, 'INVALID_GALLERY', 'The gallery index is invalid or exceeds 1000 items.');
+      return value.items;
+    })();
+    const item = (await this.galleryRecords).find(item => item && typeof item === 'object' && (item as { id?: unknown }).id === id);
+    if (!item) return null;
+    const metadata = mediaMetadata(item, id), key = `media/${id}/${metadata.filename}`;
+    const object = await this.env.MEDIA.head(key);
+    if (!object) return null;
+    const storedType = object.httpMetadata?.contentType?.split(';')[0].trim().toLowerCase();
+    if (object.size !== metadata.size || storedType && storedType !== 'application/octet-stream' && storedType !== metadata.contentType) {
+      throw new ApiError(503, 'MEDIA_STORAGE_ERROR', 'The managed object does not match its Git metadata.');
+    }
+    // Reads recover metadata in memory; they never register objects or change public grants.
+    return { ...metadata, key, ...(object.customMetadata?.owner ? { owner: object.customMetadata.owner } : {}) };
   }
   private async storageSource(object: R2Object): Promise<StoredMediaSource | null> {
     const key = object.key;
@@ -411,12 +487,26 @@ export class MediaService {
     }
     return { items, cursor: listed.truncated ? listed.cursor : null };
   }
-  async deleteMedia(id: string): Promise<void> {
+  async deleteMedia(id: string, knownRecord?: MediaRecord | null): Promise<void> {
     requireId(id);
-    const record = await this.getMedia(id);
+    const record = knownRecord ?? await this.getMedia(id);
     if (!record) return;
+    mediaMetadata(record, id);
+    if (record.key !== `media/${id}/${record.filename}`) throw new ApiError(503, 'MEDIA_STORAGE_ERROR', 'Stored media metadata is invalid.');
+    // Imports and records recovered from Git need no upload session. Create the
+    // completed state conditionally, so an active upload can never be overwritten.
+    await this.env.MEDIA.put(stateKey(id), JSON.stringify({ status: 'completed', at: new Date().toISOString() } satisfies UploadState), {
+      onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/json' },
+    });
     await this.transition(id, 'deleted');
     await this.env.MEDIA.delete([record.key, recordKey(id)]);
+  }
+  async preserveMedia(record: MediaRecord): Promise<void> {
+    requireId(record.id); mediaMetadata(record, record.id);
+    if (record.key !== `media/${record.id}/${record.filename}`) throw new ApiError(503, 'MEDIA_STORAGE_ERROR', 'Stored media metadata is invalid.');
+    await this.env.MEDIA.put(recordKey(record.id), JSON.stringify(record), {
+      onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/json' },
+    });
   }
   async readMedia(id: string, request: Request): Promise<Response> {
     if (request.method !== 'GET' && request.method !== 'HEAD') throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Media supports GET and HEAD.');

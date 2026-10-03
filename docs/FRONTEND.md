@@ -192,9 +192,9 @@ GitHub/R2/Access 凭证始终留在云端。前端只需要同域 API 和返回�
 
 ## 主题配置与图床
 
-前台 GET `/api/site`、`/api/themes/<id>/config/<document>` 读取运行时最新值。后台 GET 对应管理接口获取 `sha/value/mediaIds`；PUT 只发送 `{sha,value,mediaIds?}`，保存回声明的仓库目录。`CONFIG_CONFLICT` 时保留输入，重新加载后合并，不能自动覆盖。注册清单变更需要构建部署。
+前台 GET `/api/site`、`/api/themes/<id>/config/<document>` 读取运行时最新值。后台 GET 对应管理接口获取 `sha/value/mediaIds`；GET 的 mediaIds 仅含不能从当前配置 URL 自动识别的额外引用；PUT 只发送 `{sha,value,mediaIds?}`，保存回声明的仓库目录。`CONFIG_CONFLICT` 时保留输入，重新加载后合并，不能自动覆盖。注册清单变更需要构建部署。
 
-主题可选用 `core/upload.js` 的 `uploadTask(file, source, onProgress)` 和 `bindDrops(element, accept)`；也可以自行实现。重试任务复用会话与已完成对象，完成 R2 上传后幂等登记 GitHub 图库。公开 URL 和图库展示分别控制，草稿预览仍走鉴权路径。
+主题可选用 `core/upload.js` 的 `uploadTask(file, source, onProgress)` 和 `bindDrops(element, accept)`；也可以自行实现。重试任务复用会话与已完成对象，完成 R2 上传后幂等登记 GitHub 图库。会话已过期或被清理时，先尝试登记原已完成 ID；尚未完成的文件才创建新会话。公开 URL 和图库展示分别控制，草稿预览仍走鉴权路径。
 
 图床后台支持分页、分类、标签、说明、批量分类/公开设置、私有预览、稳定链接复制及删除。旧 R2 媒体通过 import 分页登记，保留原 ID。删除引用中的对象返回 `MEDIA_IN_USE`，引用包含草稿与停用主题配置。
 

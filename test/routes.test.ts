@@ -103,9 +103,9 @@ describe('API visibility and authorization', () => {
     expect((await app.fetch(req('/api/admin/media/' + id, 'DELETE', undefined, { Origin: origin }), env)).status).toBe(200);
     expect(media.deleteMedia).toHaveBeenCalledWith(id);
   });
-  it('leaves external media links unchanged', async () => {
+  it.each(['https://external.example', '//external.example'])('leaves external media links from %s unchanged', async external => {
     const { app, posts, media } = setup();
-    const markdown = '![图](https://external.example/media/' + id + '/photo.png)';
+    const markdown = '![图](' + external + '/media/' + id + '/photo.png)';
     expect((await app.fetch(req('/api/admin/posts/new', 'PUT', { sha: null, title: 't', markdown, status: 'draft' }, { Origin: origin }), env)).status).toBe(201);
     expect(posts.savePost.mock.calls[0][1].markdown).toBe(markdown);
     expect(media.getMedia).not.toHaveBeenCalled();

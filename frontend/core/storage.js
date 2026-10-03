@@ -3,6 +3,8 @@
   if (!root) return;
   const api = window.Mob.api, list = root.querySelector('[data-storage-items]'), note = root.querySelector('[data-storage-note]');
   const scan = root.querySelector('[data-storage-scan]');
+  const cleanup = document.createElement('button'); cleanup.type = 'button'; cleanup.textContent = '清理过期上传状态';
+  scan.after(cleanup);
   let cursor, started = false, busy = false;
   const say = message => { note.textContent = message; };
   function card(item) {
@@ -45,5 +47,21 @@
     finally { busy = false; scan.disabled = false; }
   }
   scan.addEventListener('click', () => discover(started && !cursor));
+  cleanup.addEventListener('click', async () => {
+    if (busy) return;
+    const check = new CustomEvent('mob:gallery-storage-before-import', { cancelable: true });
+    if (!window.dispatchEvent(check)) { say('请先完成当前图库操作。'); return; }
+    busy = true; cleanup.disabled = true; scan.disabled = true;
+    let next, cleaned = 0, expired = 0;
+    try {
+      do {
+        say('正在清理过期上传状态…');
+        const result = await api('/api/admin/uploads/cleanup', { method: 'POST', json: next ? { cursor: next } : {} });
+        cleaned += result.cleaned; expired += result.expired; next = result.cursor;
+      } while (next);
+      say('已清理 ' + cleaned + ' 个过期会话，取消 ' + expired + ' 个未完成的过期上传。已完成文件和图库信息保留；新取消的状态保留一天后可清理。');
+    } catch (error) { say(error.message + '；已完成文件保留，可重试清理。'); }
+    finally { busy = false; cleanup.disabled = false; scan.disabled = false; }
+  });
   discover();
 })();

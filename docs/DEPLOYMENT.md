@@ -136,7 +136,7 @@ node scripts/cloudflare-sync.mjs --apply
 | Deploy command | npm run deploy:cloudflare |
 | 前端构建入口 | wrangler.jsonc build.command → scripts/build.mjs → mob.config.json |
 
-仓库 .node-version 声明构建 Node 版本，GitHub CI 与 Cloudflare Builds 读取它；更换 Node 版本也通过仓库提交。Build command 验证代码。deploy:cloudflare 顺序执行：同步 R2/Access → 显式 node scripts/build.mjs → wrangler deploy --no-build → 同步 Builds 自身配置。
+仓库 .node-version 声明构建 Node 版本，GitHub CI 与 Cloudflare Builds 读取它；更换 Node 版本也通过仓库提交。Build command 验证代码。deploy:cloudflare 顺序执行：同步 R2/Access → 显式 node scripts/build.mjs → wrangler deploy → 同步 Builds 自身配置。
 
 [Workers Builds 官方配置说明](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/#build-settings)指出，它不自动遵循 Wrangler custom builds，所以 wrapper 显式执行仓库构建脚本，仍由 mob.config.json 决定前端编译命令和输出目录。本地 npm run deploy 继续使用 Wrangler custom build。
 

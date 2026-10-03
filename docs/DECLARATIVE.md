@@ -64,7 +64,7 @@ Cloudflare Workers Builds 使用：
 | Build command | npm run check && npm test |
 | Deploy command | npm run deploy:cloudflare |
 
-本地 npm run deploy/dev 使用 Wrangler 的 `build.command = "node scripts/build.mjs"`。[官方 Builds 说明](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/#build-settings)指出，云端不自动遵循 Wrangler custom builds，所以 deploy:cloudflare 显式执行仓库 build.mjs，再执行 wrangler deploy --no-build，避免重复编译。两条路径都读取 mob.config.json，换框架或输出目录只需改仓库。
+本地 npm run deploy/dev 使用 Wrangler 的 `build.command = "node scripts/build.mjs"`。[官方 Builds 说明](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/#build-settings)指出，云端不自动遵循 Wrangler custom builds，所以 deploy:cloudflare 显式执行仓库 build.mjs，再执行 wrangler deploy；Wrangler 会按自身配置再次运行 build.command。两条路径都读取 mob.config.json，换框架或输出目录只需改仓库。
 
 Cloudflare Builds 的命令和触发筛选由 config/cloudflare.json 声明，再由同步脚本写入平台。Build command 验证代码；部署 wrapper 显式执行仓库前端构建。GitHub Actions 的 CI 只负责验证，不持有生产部署或 GitHub 写入令牌。
 
@@ -91,7 +91,7 @@ GitHub main 提交
   → npm run deploy:cloudflare
       → cloudflare-sync --apply --resources-only（R2、Access）
       → node scripts/build.mjs（读取 mob.config.json）
-      → wrangler deploy --no-build（运行变量、静态资产、Worker、SQLite DO）
+      → wrangler deploy（运行变量、静态资产、Worker、SQLite DO）
       → cloudflare-sync --apply（Builds 自身配置）
 ```
 
