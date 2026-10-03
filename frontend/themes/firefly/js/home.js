@@ -50,7 +50,7 @@
   const sceneButtons = Array.from(document.querySelectorAll("[data-scene]"));
   const counter = document.querySelector(".story-counter");
   const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const reduced = { get matches() { return preference.matches || window.Mob.themeConfig?.motion.enabled === false; }, addEventListener: function (_, listener) { preference.addEventListener('change', listener); document.addEventListener('mob:theme-config', listener); } };
+  const reduced = { get matches() { return preference.matches || window.FireflyStatic || window.Mob.themeConfig?.motion?.enabled === false; }, addEventListener: function (_, listener) { preference.addEventListener('change', listener); document.addEventListener('mob:theme-config', listener); document.addEventListener('mob:motion', listener); } };
   document.documentElement.classList.toggle("home-enhanced", !reduced.matches);
   const desktop = window.matchMedia("(min-width: 769px)");
   const clamp = function (value) { return Math.max(0, Math.min(1, value)); };
@@ -143,6 +143,7 @@
   function requestUpdate() { if (!animationFrame) animationFrame = requestAnimationFrame(update); }
   sceneButtons.forEach(function (button, index) {
     button.addEventListener("click", function () {
+      if (reduced.matches || !desktop.matches) { scenes[index].scrollIntoView({ behavior: reduced.matches ? "instant" : "smooth", block: "start" }); return; }
       window.scrollTo({ top: measurements.story.top + measurements.story.distance * index / (scenes.length - 1), behavior: reduced.matches ? "instant" : "smooth" });
     });
   });
@@ -207,7 +208,7 @@
     button.addEventListener("click", function () {
       dialogueOpener = button;
       dialogue.hidden = false;
-      typeLine(window.Mob.themeConfig?.dialogue.welcome || "欢迎来到我的小屋。想先看看什么？");
+      typeLine(window.Mob.themeConfig?.dialogue?.welcome || "欢迎来到我的小屋。想先看看什么？");
       document.querySelector("[data-dialogue-close]").focus({ preventScroll: true });
     });
   });
@@ -219,23 +220,26 @@
   document.querySelector("[data-dialogue-close]").addEventListener("click", closeDialogue);
   document.addEventListener("keydown", function (event) { if (event.key === "Escape" && !dialogue.hidden) closeDialogue(); });
   const topics = {
-    about: ["这里是 Nivek 的个人空间。写下学到的东西、做过的尝试，也留一点位置给生活。", "/about.html", "认识一下 Nivek ↗"],
+    about: ["这里是我的个人空间。写下学到的东西、做过的尝试，也留一点位置给生活。", "/about.html", "认识一下我 ↗"],
     reading: ["阅读室里放着已经发布的笔记。可以按时间翻阅，也可以从感兴趣的标签开始。", "/archive.html", "去阅读室看看 ↗"],
-    contact: ["你可以在 GitHub 找到 Nivek。欢迎看看正在做的项目，或打个招呼。", "https://github.com/Nivek-Z", "打开 GitHub ↗"]
+    contact: ["通过这里的社交链接找到我。欢迎打个招呼。", "/about.html", "找到我 ↗"]
   };
   document.querySelectorAll("[data-topic]").forEach(function (button) {
     button.addEventListener("click", function () {
-      const topic = (window.Mob.themeConfig?.dialogue.topics || topics)[button.dataset.topic];
-      if (button.dataset.topic === 'contact' && window.Mob.site?.socials[0]) { const link = window.Mob.site.socials[0]; topic[1] = link.url; topic[2] = link.label + ' ↗'; }
-      typeLine(topic[0]);
-      dialogueLink.href = topic[1];
+      const topic = [...(window.Mob.themeConfig?.dialogue?.topics?.[button.dataset.topic] || topics[button.dataset.topic])];
+      const configured = window.Mob.themeConfig?.dialogue?.topics?.contact;
+      if (button.dataset.topic === 'contact' && !configured && window.Mob.site?.socials?.[0]) { const link = window.Mob.site.socials[0]; topic[1] = link.url; topic[2] = link.label + ' ↗'; }
+      typeLine(String(topic[0] || ""));
+      const url = window.Mob.safeUrl(topic[1]);
+      dialogueLink.hidden = !url;
+      dialogueLink.href = url || "/about.html";
       dialogueLink.textContent = topic[2];
       dialogueLink.rel = "noopener noreferrer";
-      if (topic[1].startsWith("https:")) dialogueLink.target = "_blank"; else dialogueLink.removeAttribute("target");
+      if (url && new URL(url, location.origin).origin !== location.origin) dialogueLink.target = "_blank"; else dialogueLink.removeAttribute("target");
     });
   });
   let wishes = ["一直有星光", "岁岁皆欢愉", "所念皆星河", "热爱不打烊"];
-  document.addEventListener('mob:theme-config', event => { wishes = event.detail.journey.wishes; });
+  document.addEventListener('mob:theme-config', event => { wishes = event.detail.journey?.wishes?.length ? event.detail.journey.wishes : wishes; wishIndex = 0; });
   let wishIndex = 0;
   const wishNode = document.querySelector(".wish");
   const wishTimer = setInterval(function () {

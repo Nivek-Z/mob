@@ -8,13 +8,15 @@
   }
   if (!slug) { unavailable("缺少文章地址，请从文章归档选择一篇笔记。"); return; }
   window.Mob.api("/api/posts/" + encodeURIComponent(slug)).then(function (post) {
-    document.title = post.title + " · Nivek";
+    window.Mob.postTitle = post.title;
+    document.title = post.title + " · " + (window.Mob.site?.title || "Firefly-Mod");
+    document.dispatchEvent(new CustomEvent("mob:post"));
     const description = document.querySelector('meta[name="description"]');
     if (description) description.content = post.description || post.title;
     const tags = (post.tags || []).map(function (tag) { return '<a href="/archive.html?tag=' + encodeURIComponent(tag) + '">#' + escape(tag) + '</a>'; }).join("");
     const cover = window.Mob.safeUrl(post.cover);
     const reading = Math.max(1, Math.ceil((post.markdown || "").replace(/\s/g, "").length / 450));
-    root.innerHTML = '<p class="eyebrow">NIVEK / NOTES</p><h1>' + escape(post.title) + '</h1>' + (post.description ? '<p class="excerpt">' + escape(post.description) + '</p>' : "") + '<div class="post-meta"><time datetime="' + escape(post.publishedAt || "") + '">' + escape(window.Mob.formatDate(post.publishedAt)) + '</time><span>约 ' + reading + ' 分钟阅读</span>' + (post.updatedAt && post.updatedAt !== post.publishedAt ? '<span>更新于 ' + escape(window.Mob.formatDate(post.updatedAt)) + '</span>' : "") + '</div><div class="tag-pills">' + tags + '</div>' + (cover ? '<img class="cover" src="' + escape(cover) + '" alt="文章封面" decoding="async">' : "") + '<div class="markdown">' + window.Mob.renderMarkdown(post.markdown) + '</div><footer class="post-ending"><span>谢谢你读到这里。</span><a href="/archive.html">继续阅读 ↗</a></footer>';
+    root.innerHTML = '<p class="eyebrow">NOTES / ' + escape(window.Mob.site?.profile.name || 'Firefly-Mod') + '</p><h1>' + escape(post.title) + '</h1>' + (post.description ? '<p class="excerpt">' + escape(post.description) + '</p>' : "") + '<div class="post-meta"><time datetime="' + escape(post.publishedAt || "") + '">' + escape(window.Mob.formatDate(post.publishedAt)) + '</time><span>约 ' + reading + ' 分钟阅读</span>' + (post.updatedAt && post.updatedAt !== post.publishedAt ? '<span>更新于 ' + escape(window.Mob.formatDate(post.updatedAt)) + '</span>' : "") + '</div><div class="tag-pills">' + tags + '</div>' + (cover ? '<img class="cover" src="' + escape(cover) + '" alt="文章封面" decoding="async">' : "") + '<div class="markdown">' + window.Mob.renderMarkdown(post.markdown) + '</div><footer class="post-ending"><span>谢谢你读到这里。</span><a href="/archive.html">继续阅读 ↗</a></footer>';
     const headings = Array.from(root.querySelectorAll(".markdown h1,.markdown h2,.markdown h3,.markdown h4"));
     headings.forEach(function (heading, index) { heading.id = "section-" + index; });
     toc.innerHTML = headings.length ? headings.map(function (heading, index) { return '<a href="#section-' + index + '"' + (/H[34]/.test(heading.tagName) ? ' class="sub"' : "") + '>' + escape(heading.textContent) + '</a>'; }).join("") : '<p class="quiet">随文字慢慢往下读。</p>';

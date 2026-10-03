@@ -5,7 +5,7 @@
   "themes": [
     {
       "id": "firefly",
-      "name": "萤火小屋",
+      "name": "Firefly-Mod",
       "root": "themes/firefly",
       "enabled": true
     },

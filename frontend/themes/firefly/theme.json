@@ -18,7 +18,7 @@
   "configs": [
     {
       "id": "appearance",
-      "label": "小屋展示",
+      "label": "Firefly-Mod · 展示风格",
       "path": "config/appearance.json",
       "schemaPath": "config/appearance.schema.json"
     }

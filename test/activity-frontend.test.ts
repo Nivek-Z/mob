@@ -6,7 +6,7 @@ import { readPlatformFixture } from './platform-fixtures';
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 function open(theme: string, page: string) {
   const dom = new JSDOM(readFileSync(`frontend/themes/${theme}/${page}`, 'utf8'), { url: 'https://blog.example.com', runScripts: 'outside-only', pretendToBeVisual: true });
-  dom.window.eval(readFileSync('frontend/core/api.js', 'utf8')); return { dom, win: dom.window };
+  dom.window.eval(readFileSync('frontend/core/api.js', 'utf8')); dom.window.eval(readFileSync('frontend/core/markdown.js', 'utf8')); return { dom, win: dom.window };
 }
 function sample(status = 'ok') {
   const daily = calendarDays('2026-10-03', 365).map((date, index) => ({ date, count: index % 11 === 0 ? 4 : 0 }));
@@ -46,7 +46,7 @@ describe('activity and storage frontends', () => {
       const site = JSON.parse(readPlatformFixture('config/site/settings.json'));
       const defaultValue = JSON.parse(readPlatformFixture(`frontend/themes/${theme}/config/${theme === 'paper' ? 'reading' : 'appearance'}.json`));
       const api = vi.fn(async (url: string, options?: any) => options?.method === 'PUT' ? { sha: 'b'.repeat(40), value: options.json.value, commitSha: 'c'.repeat(40) } : { sha: 'a'.repeat(40), value: url === '/api/admin/settings/site' ? site : defaultValue, mediaIds: [] });
-      win.Mob.api = api; win.eval(readFileSync(`frontend/themes/${theme}/admin/settings.js`, 'utf8')); await tick();
+      win.Mob.api = api; if (theme === 'firefly') win.eval(readFileSync('frontend/themes/firefly/admin/ui.js', 'utf8')); win.eval(readFileSync(`frontend/themes/${theme}/admin/settings.js`, 'utf8')); await tick();
       const selector = win.document.getElementById(theme === 'paper' ? 'paper-doc' : 'settings-document') as unknown as HTMLSelectElement;
       selector.value = 'site'; selector.dispatchEvent(new win.Event('change')); await tick();
       const days = theme === 'paper' ? win.document.getElementById('paper-activity-days') as HTMLInputElement : win.document.querySelector<HTMLInputElement>('input[min="30"][max="366"]')!;

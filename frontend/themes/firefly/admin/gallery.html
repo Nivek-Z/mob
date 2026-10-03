@@ -1,20 +1,157 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="dark" data-layout="firefly">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark light">
-<meta name="description" content="Nivek 的个人空间，记录代码、学习与日常。">
-<title>文章归档 · Nivek</title>
-<link rel="icon" href="/themes/firefly/assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/themes/firefly/css/site.css">
-<script src="/themes/firefly/js/theme.js"></script>
-</head>
-<body class="">
-<a class="skip-link" href="#main">跳到内容</a><header class="site-header"><a class="brand" href="/" aria-label="Nivek 主页"><span class="brand-mark">N</span><span>NIVEK 的博客</span></a><nav class="nav-pill" aria-label="主导航"><a href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10H5V10m4 10v-7h6v7"/></svg>主页</a><a href="/#guide">导航</a><a href="/archive.html" aria-current="page">文章</a><a href="/tags.html">标签</a><a href="/gallery.html">图库</a><a href="/about.html">关于</a></nav><div class="header-actions"><button class="icon-button" type="button" data-theme-toggle aria-label="切换明暗主题" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/></svg></button><button class="icon-button menu-toggle" type="button" aria-label="打开导航" aria-expanded="false" aria-controls="mobile-menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div></header><nav class="mobile-menu" id="mobile-menu" aria-label="移动导航" hidden><a href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10H5V10m4 10v-7h6v7"/></svg>主页</a><a href="/#guide">导航</a><a href="/archive.html" aria-current="page">文章</a><a href="/tags.html">标签</a><a href="/gallery.html">图库</a><a href="/about.html">关于</a><a href="/admin/">管理</a></nav><main class="page" id="main"><header class="page-heading"><p class="eyebrow">MANAGEMENT</p><h1>管理图床。</h1></header><nav class="admin-tabs"><a href="/admin/">写作台</a><a href="/admin/gallery.html">图床</a><a href="/admin/settings.html">设置</a></nav><section class="drop-zone" id="gallery-drop" tabindex="0"><p>拖放、粘贴图片，或选择图片 / 音视频</p><input type="file" id="gallery-file" multiple accept="image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4"><div id="gallery-uploads" aria-live="polite"></div></section><div class="actions"><label>筛选分类 <select id="gallery-category"><option value="">全部分类</option></select></label><button id="gallery-import">批量登记历史上传</button><button id="gallery-save" class="solid">保存修改</button></div><details class="batch-panel"><summary>批量设置（当前页所选项）</summary><label>分类 <select id="batch-category"></select></label><label><input id="batch-public" type="checkbox">公开链接</label><label><input id="batch-listed" type="checkbox">公开图库展示</label><button id="gallery-batch">应用到所选项</button></details><p id="gallery-note" aria-live="polite"></p><div id="gallery-items" class="media-grid"></div><div class="actions"><button id="gallery-prev">上一页</button><span id="gallery-page"></span><button id="gallery-next">下一页</button></div><section data-storage-discovery class="batch-panel"><h2>R2 中未登记的素材</h2><p>主题预置图片与直接存入 R2 的素材会在这里显示。历史上传保留原 ID；其他素材创建图床副本，原文件与原链接保留。纳入后默认私有。</p><button type="button" data-storage-scan>扫描 R2</button><p data-storage-note aria-live="polite"></p><div data-storage-items class="media-grid"></div></section></main><footer class="site-footer"><div><a class="footer-name" href="/">Nivek.</a><p>留一点空间，给热爱与好奇。</p></div><div class="footer-links"><a href="https://github.com/Nivek-Z" target="_blank" rel="noopener noreferrer">GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></a><a href="/admin/">管理 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></a><small>视觉灵感 · <a href="https://github.com/MmzMing/my-blog" target="_blank" rel="noopener noreferrer">Firefly-Mod</a></small><small>© <span data-year>2026</span> Nivek</small></div><div class="shared-links"><div data-socials></div><div data-friends></div></div></footer><button class="back-top icon-button" aria-label="返回顶部" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V4m-6 6 6-6 6 6"/></svg></button><div class="scroll-progress" aria-hidden="true"></div><script src="/themes/firefly/js/site.js" defer></script>
-<script src="/core/api.js" defer></script>
-<script src="/core/markdown.js" defer></script>
-<script src="/admin/assets/firefly/gallery.js" defer></script>
-<script src="/core/upload.js" defer></script><script src="/core/runtime.js" defer></script><script src="/themes/firefly/js/config.js" defer></script>
-<script src="/core/storage.js" defer></script></body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>图床 · Firefly-Mod</title>
+    <script src="/themes/firefly/js/theme.js"></script>
+    <link rel="stylesheet" href="/themes/firefly/css/site.css" />
+    <link rel="stylesheet" href="/admin/assets/firefly/admin.css" />
+  </head>
+  <body class="admin-page">
+    <a class="skip-link" href="#admin-main">跳到主内容</a>
+    <header class="admin-topbar">
+      <a class="admin-brand" href="/admin/"
+        ><span>✳</span>Firefly-Mod <small>管理</small></a
+      >
+      <div class="admin-top-actions">
+        <span data-save-state role="status">已同步</span
+        ><button type="button" data-theme-toggle aria-label="切换明暗模式">
+          ◐</button
+        ><a href="/" target="_blank" rel="noopener">前台 ↗</a>
+      </div>
+    </header>
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <nav aria-label="管理导航">
+          <a href="/admin/"><span>✎</span>写作台</a
+          ><a href="/admin/gallery.html" aria-current="page"
+            ><span>▧</span>图床</a
+          ><a href="/admin/settings.html"><span>⚙</span>设置</a>
+        </nav>
+        <div class="admin-account">
+          <small>当前管理员</small><span id="who">正在验证…</span
+          ><small>⌘ / Ctrl S 快速保存</small>
+        </div>
+      </aside>
+      <main id="admin-main" class="admin-main">
+        <div class="admin-heading">
+          <div>
+            <p class="eyebrow">YOUR MEDIA LIBRARY</p>
+            <h1>图床</h1>
+            <p class="muted">
+              图片、音频和视频集中管理。上传默认私有，展示与链接权限由你决定。
+            </p>
+          </div>
+          <a
+            class="button quiet-button"
+            href="/gallery.html"
+            target="_blank"
+            rel="noopener"
+            >查看公开图库 ↗</a
+          >
+        </div>
+        <section id="gallery-drop" class="admin-panel upload-zone">
+          <span class="upload-symbol">＋</span>
+          <div>
+            <h2>拖入素材，或选择文件</h2>
+            <p class="muted">
+              支持图片、音频、视频。失败可重试，成功后纳入私有图床。
+            </p>
+          </div>
+          <label class="button primary"
+            >选择文件<input
+              id="gallery-file"
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/webm,audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/webm,audio/flac"
+              multiple
+              hidden
+          /></label>
+        </section>
+        <div id="gallery-uploads" role="status" aria-live="polite"></div>
+        <section class="admin-panel">
+          <form id="gallery-search-form" class="gallery-filters">
+            <label class="field"
+              >分类<select id="gallery-category">
+                <option value="">全部分类</option>
+              </select></label
+            ><label class="field"
+              >搜索<input
+                id="gallery-search"
+                type="search"
+                placeholder="标题、说明或标签" /></label
+            ><button type="submit">搜索</button
+            ><button id="gallery-reload" type="button" class="quiet-button">
+              刷新
+            </button>
+          </form>
+          <div class="gallery-batch-bar">
+            <label
+              ><input id="gallery-select-all" type="checkbox" /> 全选本页</label
+            ><span id="gallery-selected">已选 0 项</span
+            ><label class="field"
+              ><span class="sr-only">批量分类</span
+              ><select id="batch-category">
+                <option value="">保持分类</option>
+              </select></label
+            ><label class="field"
+              ><span class="sr-only">批量链接权限</span
+              ><select id="batch-public">
+                <option value="">保持链接权限</option>
+                <option value="true">公开稳定链接</option>
+                <option value="false">设为私有</option>
+              </select></label
+            ><label class="field"
+              ><span class="sr-only">批量展示权限</span
+              ><select id="batch-listed">
+                <option value="">保持展示状态</option>
+                <option value="true">展示在图库</option>
+                <option value="false">从图库隐藏</option>
+              </select></label
+            ><button id="gallery-batch" type="button" disabled>
+              应用到选中项
+            </button>
+          </div>
+          <div id="gallery-items" class="media-grid" aria-live="polite"></div>
+          <div class="gallery-pagination">
+            <button id="gallery-prev" type="button">上一页</button
+            ><span id="gallery-page">—</span
+            ><button id="gallery-next" type="button">下一页</button>
+          </div>
+        </section>
+        <div class="save-bar">
+          <p id="gallery-note" role="status" aria-live="polite">正在加载…</p>
+          <button id="gallery-save" type="button" class="primary" disabled>
+            保存修改
+          </button>
+        </div>
+        <details class="admin-panel storage-discovery" data-storage-discovery>
+          <summary>发现 R2 中尚未登记的素材</summary>
+          <p class="muted">
+            主题素材和旧文件纳入时创建私有图床副本，原文件与链接保持有效。
+          </p>
+          <button type="button" data-storage-scan>扫描 R2</button>
+          <p data-storage-note role="status" aria-live="polite"></p>
+          <div data-storage-items class="media-grid"></div>
+          <details>
+            <summary>登记历史上传记录</summary>
+            <p class="muted">
+              仅登记有上传记录、尚未进入图床的对象，保留原 ID。
+            </p>
+            <button id="gallery-import" type="button">登记历史上传</button>
+          </details>
+        </details>
+      </main>
+    </div>
+    <script src="/core/api.js"></script>
+    <script src="/core/vendor/marked.umd.js"></script>
+    <script src="/core/vendor/purify.min.js"></script>
+    <script src="/core/markdown.js"></script>
+    <script src="/core/upload.js"></script>
+    <script src="/themes/firefly/js/site.js"></script>
+    <script src="/admin/assets/firefly/ui.js"></script>
+    <script src="/admin/assets/firefly/gallery.js"></script>
+    <script src="/core/storage.js"></script>
+  </body>
 </html>

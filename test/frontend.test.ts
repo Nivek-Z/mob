@@ -58,7 +58,7 @@ describe('theme frontends', () => {
     const { dom, win } = fixture('frontend/themes/firefly/admin/settings.html');
     const value = JSON.parse(readPlatformFixture('frontend/themes/firefly/config/appearance.json'));
     const api = vi.fn(async (_url, options) => { if (options?.method === 'PUT') throw Object.assign(new Error('conflict'), { code: 'CONFIG_CONFLICT' }); return { sha: 'a'.repeat(40), value, mediaIds: [] }; });
-    win.Mob.api = api; win.eval(readFileSync('frontend/themes/firefly/admin/settings.js', 'utf8')); await tick();
+    win.Mob.api = api; win.eval(readFileSync('frontend/themes/firefly/admin/ui.js', 'utf8')); win.eval(readFileSync('frontend/themes/firefly/admin/settings.js', 'utf8')); await tick();
     const raw = win.document.getElementById('settings-json') as HTMLTextAreaElement; value.hero.eyebrow = '未保存的文字'; raw.value = JSON.stringify(value); raw.dispatchEvent(new win.Event('input'));
     win.document.getElementById('settings-save')!.click(); await tick();
     expect(raw.value).toContain('未保存的文字'); expect(win.document.getElementById('settings-note')!.textContent).toContain('已保留');
