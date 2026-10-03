@@ -1,13 +1,20 @@
 # mob
 
-GitHub 保存文章，Cloudflare Workers 提供 API 和前端静态托管，私有 R2 保存图片与视频。登录和管理员权限由 Cloudflare Access + Worker 校验完成。
+GitHub 保存文章与全部文本配置，Cloudflare Workers 提供 API 和前端静态托管，私有 R2 保存上传的图片、音频与视频。登录和管理员权限由 Cloudflare Access + Worker 校验完成。
 
-本项目不绑定前端框架，也没有生成编辑器 UI。你可以直接提交 HTML/CSS/JS，或使用能输出静态文件的任意前端工具。文章和代码都在这个仓库，文章目录为 `content/posts/`。
+本项目不绑定前端框架。每个主题自行实现前台、管理界面和专属配置，公共资料、社交链接和友链全站共用。你可以直接提交 HTML/CSS/JS，或使用能输出静态文件的任意前端工具。文章和代码都在这个仓库，文章目录为 `content/posts/`。
+
+维护前阅读 [平台守则](docs/PLATFORM.md)、[主题协议](docs/THEMES.md) 与 [维护守则](AGENTS.md)。
 
 ## 目录
 
 ```text
-frontend/                你维护的前端源码
+frontend/themes/         各主题的前台、后台、声明与配置
+frontend/themes.json      默认主题与访客切换清单
+frontend/core/            可选客户端助手
+config/site/             共用资料、社交链接、友链与导航
+config/gallery/          共用图床分类
+content/gallery/         图床文本索引
 content/posts/           GitHub 文章 Markdown（由 API 写入）
 src/                     Worker API、鉴权、GitHub/R2 服务
 mob.config.json          前端构建模式、命令、输出目录
@@ -37,7 +44,7 @@ npm ci
 npm run verify
 ```
 
-`npm test` 同时运行 Node 单元测试与 Cloudflare `workerd` 运行时集成测试。后者覆盖原生 fetch、Access JWT 验证、文章读写协调和 R2 单文件/分片上传；所有外部请求由本地测试替身处理，不使用生产凭据或操作线上文章。`npm run check && npm test` 可独立完成这些检查。
+`npm test` 同时运行 Node 单元测试与 Cloudflare `workerd` 运行时集成测试。后者覆盖原生 fetch、Access JWT 验证、文章读写协调、R2 单文件/分片/音频上传、图库公开与删除保护、主题切换、Schema及配置原子提交；所有外部请求由本地测试替身处理，不使用生产凭据或操作线上文章。`npm run check && npm test && npm run build` 可完成本地检查、主题声明验证与静态构建。
 
 本地调试把 `.dev.vars.example` 复制成 `.dev.vars`，填写本地开发令牌和 GitHub PAT，再运行：
 

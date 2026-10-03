@@ -1,5 +1,8 @@
 # 全程在 Cloudflare 控制台部署
 
+维护前阅读 [平台守则](PLATFORM.md) 和 [主题协议](THEMES.md)：文本配置写 GitHub，媒体资源写 R2；公共资料、社交链接和友链统一管理；主题自行定义专属配置与前台/后台实现。
+
+
 连接 Nivek-Z/mob GitHub 仓库，Worker 名 mob，分支 main，根目录 /。
 Build command：npm run check && npm test；Deploy command：npm run deploy:cloudflare。
 先在 Cloudflare 启用 R2 和 Zero Trust，并授权 Cloudflare GitHub App 访问 mob。
@@ -27,3 +30,5 @@ Cloudflare Builds 平台的部署 API token 单独选择/创建，需 Workers Sc
 不要仅在 Worker 运行时添加这些构建参数：构建与运行时环境相互独立。
 
 官方：[Builds 配置](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)；[随部署上传 Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。
+
+后台脚本与专属资产通过 `/admin/assets/<theme>/<file>` 加载，Worker 将其映射到主题 admin/；这样沿用现有 `/admin/*` Access 范围即可注入 JWT。原始 `/themes/<id>/admin/` 直达同样经过 Worker 鉴权，但主题 HTML应使用 canonical 管理资产地址，避免未覆盖的网关路径造成 401。

@@ -1,5 +1,8 @@
 # 架构与工作流程
 
+维护前阅读 [平台守则](PLATFORM.md) 和 [主题协议](THEMES.md)：文本配置写 GitHub，媒体资源写 R2；公共资料、社交链接和友链统一管理；主题自行定义专属配置与前台/后台实现。
+
+
 ## 组件
 
 ```mermaid
@@ -7,7 +10,7 @@ flowchart LR
     Reader[读者浏览器] --> Worker[Cloudflare Worker]
     Editor[管理员浏览器] --> Access[Cloudflare Access]
     Access --> Worker
-    Worker --> GitHub[GitHub content/posts/*.md]
+    Worker --> GitHub[GitHub 文章、公共设置、主题配置与图库文本]
     Worker --> R2[私有 R2 媒体与索引缓存]
     Worker --> Mutations[全局 SQLite Durable Object]
     Mutations --> GitHub
@@ -25,8 +28,8 @@ flowchart LR
 
 1. 编辑器通过上传接口创建媒体上传会话。
 2. 小文件上传一次；大文件按服务器返回的分片大小逐片上传，再完成会话。
-3. Worker 把媒体对象和元数据写入私有 R2，返回稳定的媒体 URL。
-4. 编辑器用 URL 替换正文中的本地图片/视频，并保存媒体 id 到 `mediaIds`。
+3. Worker 把媒体字节、上传会话和完整性记录写入私有 R2，返回稳定的媒体 URL。
+4. 编辑器将已完成 ID幂等登记到 GitHub 图库的文章插图分类，再用 URL替换正文中的本地图片/音视频。
 5. 编辑器 PUT 文章内容、状态和旧 SHA。
 6. Worker 验证登录身份、Origin、字段和媒体引用，生成 YAML front matter + Markdown，提交到 `content/posts/<slug>.md`。
 7. 返回新 SHA 和 GitHub commit SHA，编辑器更新本地版本。
@@ -38,13 +41,13 @@ GitHub 是文章的权威存储。每次列表与公开媒体授权先读取当�
 
 ## 草稿和公开媒体
 
-R2 桶不打开公共访问，也不配置可绕过 Worker 的公共对象域名。固定文章链接采用本博客域名下 `/media/<id>/<filename>`，由 Worker 判断是否至少有一篇已发布文章引用这个媒体。
+R2 桶不打开公共访问，也不配置可绕过 Worker 的公共对象域名。固定文章链接采用本博客域名下 `/media/<id>/<filename>`，由 Worker 判断已发布文章引用、有效公共/启用主题配置引用或显式图库公开状态。
 
 - 未发布文章不出现在公开列表，也不能通过公开单篇 API 读取。
 - 草稿媒体通过 `/api/admin/media/<id>/file` 登录预览；文章仍保存稳定的 `/media/...` URL。
 - 文章发布后，它引用的媒体可以公开读取。
-- 只有草稿引用或没有文章引用时，公开媒体 URL 返回 404。
-- 只要还有任意文章（含草稿）引用媒体，管理员删除媒体返回 409，先解除引用。
+- 只有草稿引用且无其他公开授权时，公开媒体 URL 返回 404。
+- 只要还有任意文章（含草稿）或公共/主题配置（含停用主题）引用媒体，管理员删除媒体返回 409，先解除引用。
 
 不要把后台预览地址、对象存储 key 或临时鉴权参数当作正文永久链接。视频使用同样的 R2 文件模型，公开读取支持 Range，前端可用原生 video 播放；这里没有视频转码、HLS 或缩略图生成服务。
 
@@ -77,3 +80,11 @@ GitHub PAT 不到浏览器，R2 不需要暴露 S3 密钥。Access 在边缘拦�
 前端源码或 Worker 代码提交后，Cloudflare Workers Builds 拉取同一仓库，调用 deploy:cloudflare。wrapper 同步资源，显式执行 scripts/build.mjs 读取 mob.config.json 产出静态资源，再执行 wrangler deploy --no-build，最后同步 Builds 自身的声明。
 
 文章接口直接在运行时读取 GitHub，因此新文章不依赖前端重新构建才可阅读。Workers Builds 可能也会因文章 commit 触发构建，这是部署触发配置决定的，不改变文章 API 的数据路径。
+
+## 主题配置与图库文本
+
+公共资料、导航、社交和友链放在 config/site/settings.json。各主题自己声明 config 文档和 UI；SettingsService 只按安全路径、SHA、可选 Schema与媒体引用处理。配置与 references 侧文件使用同一个 Git tree/commit，并通过非强制 ref 更新防止覆盖并发提交。
+
+图库的 title/description/category/tags/isPublic/isListed 位于 GitHub content/gallery/items.json；R2记录只描述上传对象与完整性。文章/配置/图库写入和对象删除共用 Mutations 队列。上传完成后登记失败可重试，图库删除先撤销文本公开记录，再删除 R2对象。
+
+主题路由读取已部署清单，访客通过 theme 参数与 mob-layout Cookie选择；返回 HTML使用 private/no-store 和 Vary: Cookie。配置值读取仓库最新文件；注册清单、源码、静态入口仍需部署。管理资产映射到 /admin/assets/<id>/，同时保护原始主题管理路径。

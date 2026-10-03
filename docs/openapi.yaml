@@ -2,10 +2,12 @@ openapi: 3.1.0
 info:
   title: mob blog API
   version: 0.1.0
-  description: GitHub Markdown + private R2. Success {data}; errors {error,requestId}. Frontend and
-    API use the same origin. Admin requires Access; development+localhost only may use configured
-    DEV_AUTH_TOKEN as Bearer. Runtime GITHUB_TOKEN is required even for a public repository. Article
-    index supports at most 500 articles and 32 MiB each for total sources and serialized index.
+  description: GitHub Markdown + private R2. Success {data}; errors
+    {error,requestId}. Frontend and API use the same origin. Admin requires
+    Access; development+localhost only may use configured DEV_AUTH_TOKEN as
+    Bearer. Runtime GITHUB_TOKEN is required even for a public repository.
+    Article index supports at most 500 articles and 32 MiB each for total
+    sources and serialized index.
 servers:
   - url: /
     description: Same-origin production
@@ -209,11 +211,12 @@ paths:
     put:
       operationId: savePost
       summary: Save Markdown to GitHub
-      description: sha:null creates; current blob SHA updates. 409 requires manual merge. All media must
-        be uploaded first. Managed media URLs must match the returned filename; merged media
-        references cannot exceed 200. INVALID_MEDIA_URL/TOO_MANY_MEDIA_REFERENCES reject invalid
-        links. Writes are serialized by the global SQLite Durable Object; missing binding returns
-        COORDINATOR_NOT_CONFIGURED.
+      description: sha:null creates; current blob SHA updates. 409 requires manual
+        merge. All media must be uploaded first. Managed media URLs must match
+        the returned filename; merged media references cannot exceed 200.
+        INVALID_MEDIA_URL/TOO_MANY_MEDIA_REFERENCES reject invalid links. Writes
+        are serialized by the global SQLite Durable Object; missing binding
+        returns COORDINATOR_NOT_CONFIGURED.
       security:
         - CloudflareAccess: []
       parameters:
@@ -314,7 +317,8 @@ paths:
     post:
       operationId: createUpload
       summary: Start a 24-hour upload session
-      description: Default maximum 1 GiB. <=8 MiB single, otherwise multipart with 8 MiB slices.
+      description: Default maximum 1 GiB. <=8 MiB single, otherwise multipart with 8
+        MiB slices.
       security:
         - CloudflareAccess: []
       parameters:
@@ -344,6 +348,10 @@ paths:
                     - image/avif
                     - video/mp4
                     - video/webm
+                    - audio/mpeg
+                    - audio/wav
+                    - audio/ogg
+                    - audio/mp4
                 size:
                   type: integer
                   minimum: 1
@@ -422,7 +430,8 @@ paths:
     put:
       operationId: uploadSingle
       summary: Raw binary single-file upload; success finishes it
-      description: Maximum 8 MiB. Retrying a completed single upload returns the media record.
+      description: Maximum 8 MiB. Retrying a completed single upload returns the media
+        record.
       security:
         - CloudflareAccess: []
       parameters:
@@ -461,8 +470,8 @@ paths:
     put:
       operationId: uploadPart
       summary: Raw multipart slice, index starting at 1
-      description: Non-final slices must be exactly partSize bytes; final slice must exactly match
-        remaining bytes.
+      description: Non-final slices must be exactly partSize bytes; final slice must
+        exactly match remaining bytes.
       security:
         - CloudflareAccess: []
       parameters:
@@ -505,7 +514,8 @@ paths:
     post:
       operationId: completeUpload
       summary: Complete media; server collects ETags
-      description: Idempotent completion. 409 UPLOAD_INCOMPLETE provides details.missingParts.
+      description: Idempotent completion. 409 UPLOAD_INCOMPLETE provides
+        details.missingParts.
       security:
         - CloudflareAccess: []
       parameters:
@@ -692,7 +702,8 @@ paths:
           type: string
     get:
       operationId: readMedia
-      summary: Media referenced by a published article; otherwise 404
+      summary: Media referenced by published article, effective config, or explicit
+        public gallery grant; otherwise 404
       responses:
         "200":
           description: File bytes; HEAD has no body.
@@ -711,7 +722,8 @@ paths:
           $ref: "#/components/responses/Error"
     head:
       operationId: headMedia
-      summary: Published media headers
+      summary: Media referenced by published article, effective config, or explicit
+        public gallery grant; otherwise 404
       responses:
         "200":
           description: File bytes; HEAD has no body.
@@ -728,14 +740,601 @@ paths:
           description: "Invalid range. Content-Range: bytes */size."
         default:
           $ref: "#/components/responses/Error"
+  /api/site:
+    get:
+      operationId: siteSettings
+      summary: Shared profile, social/friend links and navigation from GitHub
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      value: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/settings/site:
+    get:
+      operationId: editSiteSettings
+      summary: Read shared settings and optimistic editing SHA
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: &a1
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveSiteSettings
+      summary: Atomically save GitHub text and references
+      security:
+        - CloudflareAccess: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditableConfig"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: *a1
+  /api/themes:
+    get:
+      operationId: availableThemes
+      summary: Enabled local themes; declaration edits require deployment
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/themes:
+    get:
+      operationId: editThemeRegistry
+      summary: Read complete theme registry
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: &a1
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveThemeRegistry
+      summary: Validate installed entries then save registry; redeploy to apply
+      security:
+        - CloudflareAccess: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditableConfig"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: *a1
+  /api/themes/{id}/config/{document}:
+    get:
+      operationId: publicThemeConfig
+      summary: Read an enabled theme configuration at runtime
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: document
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      value: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/themes/{id}/config/{document}:
+    get:
+      operationId: editThemeConfig
+      summary: Read declared theme configuration and editing SHA
+      security:
+        - CloudflareAccess: []
+      parameters: &a1
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: document
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: &a2
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveThemeConfig
+      summary: Save arbitrary theme JSON, optionally checked with local JSON Schema
+      security:
+        - CloudflareAccess: []
+      parameters: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditableConfig"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: *a2
+  /api/gallery:
+    get:
+      operationId: publicGallery
+      summary: List explicitly public and listed gallery items
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/GalleryItem"
+                      total:
+                        type: integer
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                      sha:
+                        type:
+                          - string
+                          - "null"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery:
+    get:
+      operationId: editGallery
+      summary: Paginated gallery including private objects and index SHA
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/GalleryItem"
+                      total:
+                        type: integer
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                      sha:
+                        type:
+                          - string
+                          - "null"
+        default: &a1
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateGallery
+      summary: Atomic batch of 1–100 gallery changes; same SHA required
+      security:
+        - CloudflareAccess: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sha
+                - items
+              properties:
+                sha:
+                  type:
+                    - string
+                    - "null"
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required:
+                      - id
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      title:
+                        type: string
+                        maxLength: 200
+                      description:
+                        type: string
+                        maxLength: 4000
+                      categoryId:
+                        type: string
+                      tags:
+                        type: array
+                        maxItems: 30
+                        items:
+                          type: string
+                          maxLength: 100
+                      isPublic:
+                        type: boolean
+                      isListed:
+                        type: boolean
+                    additionalProperties: false
+              additionalProperties: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data: {}
+        default: *a1
+  /api/gallery/categories:
+    get:
+      operationId: galleryCategories
+      summary: Shared gallery category IDs and names
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      value: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery/categories:
+    get:
+      operationId: editGalleryCategories
+      summary: Read shared categories with SHA
+      security:
+        - CloudflareAccess: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: &a1
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveGalleryCategories
+      summary: Reject removing categories still in use
+      security:
+        - CloudflareAccess: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditableConfig"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ConfigDocument"
+        default: *a1
+  /api/admin/gallery/items:
+    post:
+      operationId: registerGalleryMedia
+      summary: Idempotently register a completed R2 ID; private by default
+      security:
+        - CloudflareAccess: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                source:
+                  enum:
+                    - editor
+                    - gallery
+                    - theme
+                    - import
+              additionalProperties: false
+      responses:
+        "201":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery/items/{id}:
+    delete:
+      operationId: deleteGalleryMedia
+      summary: Protect all draft/published/config references, revoke GitHub entry then
+        delete R2
+      security:
+        - CloudflareAccess: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sha
+              properties:
+                sha:
+                  type:
+                    - string
+                    - "null"
+              additionalProperties: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /api/admin/gallery/import:
+    post:
+      operationId: importExistingMedia
+      summary: Import 25 existing R2 records per page, preserving IDs
+      security:
+        - CloudflareAccess: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cursor:
+                  type: string
+                  maxLength: 2048
+              additionalProperties: false
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data: {}
+        default:
+          $ref: "#/components/responses/Error"
+  /theme-media/{id}/{filename}:
+    get:
+      operationId: readThemeSeed
+      summary: Initialize a declared seed in R2, then serve the R2 object
+      parameters: &a1
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Media bytes from private R2
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: ETag matched; no body
+        default:
+          $ref: "#/components/responses/Error"
+    head:
+      operationId: headThemeSeed
+      summary: R2 decorative media metadata
+      parameters: *a1
+      responses:
+        "200":
+          description: Media metadata; no body
+        "304":
+          description: ETag matched; no body
+        default:
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     CloudflareAccess:
       type: apiKey
       in: header
       name: Cf-Access-Jwt-Assertion
-      description: Valid Access JWT injected at edge after browser login. Browser normally sends
-        CF_Authorization cookie.
+      description: Valid Access JWT injected at edge after browser login. Browser
+        normally sends CF_Authorization cookie.
   parameters:
     Id:
       name: id
@@ -1043,6 +1642,10 @@ components:
             - image/avif
             - video/mp4
             - video/webm
+            - audio/mpeg
+            - audio/wav
+            - audio/ogg
+            - audio/mp4
         size:
           type: integer
           minimum: 1
@@ -1090,6 +1693,10 @@ components:
             - image/avif
             - video/mp4
             - video/webm
+            - audio/mpeg
+            - audio/wav
+            - audio/ogg
+            - audio/mp4
         size:
           type: integer
           minimum: 1
@@ -1118,6 +1725,12 @@ components:
           minimum: 1
         uploadId:
           type: string
+        status:
+          enum:
+            - active
+            - completed
+        record:
+          $ref: "#/components/schemas/MediaRecord"
       additionalProperties: false
     Error:
       type: object
@@ -1142,6 +1755,94 @@ components:
           format: uuid
           pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
       additionalProperties: false
+    EditableConfig:
+      type: object
+      required:
+        - sha
+        - value
+      properties:
+        sha:
+          type:
+            - string
+            - "null"
+          pattern: ^[a-fA-F0-9]{40}$
+        value: {}
+        mediaIds:
+          type: array
+          maxItems: 200
+          items:
+            type: string
+            format: uuid
+      additionalProperties: false
+    ConfigDocument:
+      type: object
+      required:
+        - sha
+        - value
+      properties:
+        sha:
+          type:
+            - string
+            - "null"
+        value: &a1 {}
+        mediaIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        commitSha:
+          type: string
+        declaration: *a1
+    GalleryItem:
+      type: object
+      required:
+        - id
+        - filename
+        - url
+        - contentType
+        - categoryId
+        - isPublic
+        - isListed
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        url:
+          type: string
+          format: uri
+        contentType:
+          type: string
+        size:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 4000
+        categoryId:
+          type: string
+        tags:
+          type: array
+          maxItems: 30
+          items:
+            type: string
+            maxLength: 100
+        isPublic:
+          type: boolean
+        isListed:
+          type: boolean
+        source:
+          enum:
+            - editor
+            - gallery
+            - theme
+            - import
   responses:
     Error:
       description: API error. Access edge may redirect to HTML login before reaching Worker.

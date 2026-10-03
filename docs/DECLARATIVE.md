@@ -1,5 +1,8 @@
 # 仓库是配置来源
 
+维护前阅读 [平台守则](PLATFORM.md) 和 [主题协议](THEMES.md)：文本配置写 GitHub，媒体资源写 R2；公共资料、社交链接和友链统一管理；主题自行定义专属配置与前台/后台实现。
+
+
 推荐全程控制台部署：见 [云端环境变量部署](CLOUD-DEPLOY.md)。下文仓库配置/本地引导仍可用；云端构建参数优先覆盖仓库默认值。
 
 可版本化的配置放进 GitHub，Cloudflare 执行这些声明。前端编译命令也由仓库决定，不需要每换一次框架就在 Cloudflare 面板改一遍。
@@ -47,7 +50,7 @@
 
 不要填写 `"npm run build && ..."` 这类字符串，也不要在命令参数中放凭证。自定义安装/编译命令由仓库内容控制，应只在可信代码分支部署。
 
-构建复制会拒绝 symlink/junction、输出目录越界，清理前核对目标确实是本仓库 `dist/client`。README、隐藏文件、node_modules 不上传。空前端只生成说明文本资源，首页会返回 404，直到你放入页面。
+构建复制会拒绝 symlink/junction、输出目录越界，清理前核对目标确实是本仓库 `dist/client`。README、AGENTS、隐藏文件、node_modules 不上传。空前端只生成说明文本资源，首页会返回 404，直到你放入页面。
 
 ## Cloudflare 构建入口
 
@@ -103,3 +106,5 @@ GitHub main 提交
 当 builds.enabled=false 时，完整同步会暂停已有所属 trigger 的全部分支自动触发，保留资源。暂停后将配置改回 true 的提交不会自行唤醒旧 trigger，需手动 cloudflare-sync --apply 或手动触发一次部署；恢复后继续按声明筛选。--resources-only 不修改 Builds。
 
 构建会保留 dist/client 根目录，只清理经过路径检查的子项并重试短暂文件占用，兼容 Windows 本地开发的目录 watcher；旧资源不会残留。
+
+主题注册及可编辑文档在 frontend/themes.json 与各主题 theme.json 声明；公共资料、导航和图库分类由 config/site、config/gallery 共用管理。声明规则和扩展自由见 THEMES.md。声明默认值/Schema不能与可编辑文件重叠，构建拒绝缺失入口、不安全路径和未匹配的媒体种子摘要。

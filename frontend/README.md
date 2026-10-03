@@ -1,34 +1,13 @@
-# Nivek 个人博客前端
+# 前端与主题
 
-本目录提供可直接部署的 HTML/CSS/JS 静态页面。首页以个人展示为主，视觉和交互参考 [MmzMing/my-blog](https://github.com/MmzMing/my-blog) 的 Firefly-Mod，包括碎片拼合首屏、站点导览、场景揭示和五幕滚动叙事。手机使用独立个人介绍和纵向故事布局；减少动画模式关闭固定滚动和循环动效。
+先阅读 [平台守则](../docs/PLATFORM.md)、[主题协议](../docs/THEMES.md) 和本目录 `AGENTS.md`。GitHub 保存文本配置，R2 保存图片、音频和视频；个人资料、社交链接、友链、导航、文章封面及图库分类全站共用。
 
-公开页通过同域 `/api/posts` 读取真实文章，写作台 `/admin/` 继续使用现有 Access 登录和管理 API。没有示例文章、虚构访问统计或第三方分析代码。Markdown 阅读与编辑预览使用本地 Marked 和 DOMPurify，支持表格、代码块、图片和站内媒体视频。
+`themes.json` 声明可用主题、默认主题和访客切换。每个主题在 `themes/<id>/` 提供自己的 `theme.json`、静态前台、`admin/` 管理界面与 `config/`。主题自由决定字段、表单、技术栈和动效；`core/` 只是可选的同域 API、上传、Markdown 和公共信息读取助手，不是唯一后台模板。
 
-纯静态模式无需前端安装或编译。运行仓库根目录的 `npm run build` 会复制到 `dist/client/`；不要编辑生成目录。所有图片、样式和脚本均在本目录，不依赖 CDN。
+目前有两套完整主题：`firefly`（萤火小屋，个人展示、碎片拼合首屏与滚动叙事）和 `paper`（纸间，排版与阅读）。访客通过首页选择器切换整套前台和后台，明暗模式由主题自行决定。两套后台均提供文章、图床、公共资料及自身配置管理。
 
-个人介绍与场景文案位于 `index.html`、`about.html`，黑猫对话位于 `js/home.js`。主题由 `css/site.css` 管理，首页动效样式位于 `css/home.css`。GitHub 链接已设置为 `Nivek-Z`。
+`npm run build` 检查主题路由、可编辑文件边界和媒体种子摘要，再复制到 `dist/client/`。README、AGENTS、隐藏文件与 node_modules 不发布；不要直接修改 dist。框架项目通过 `mob.config.json` 输出完整静态目录，仍需保留主题声明。
 
-参考素材和许可见 `assets/Firefly-Mod-LICENSE.txt`；本地解析器许可见 `assets/marked-LICENSE.txt`、`assets/DOMPurify-LICENSE.txt`。未使用 Live2D 或 Spine 模型。
+主题自带图片作为部署种子，在 `/theme-media/<id>/<filename>` 第一次读取时写入 R2，以后从 R2 提供。原始 `assets/images/` 入口被 Worker 阻止。自定义图片从后台上传图床，把稳定 URL 保存到对应配置即可。图床上传不进入 GitHub。
 
-## 构建约定
-
-纯静态示例布局：
-
-```text
-frontend/
-  index.html
-  css/site.css
-  js/site.js
-  admin/index.html
-  admin/editor.js
-```
-
-没有 `frontend/package.json` 时，默认把本目录的静态文件复制到 `dist/client/`。README、隐藏文件、node_modules 不发布。
-
-使用框架时，在本目录提供 package.json、依赖锁文件和构建脚本，修改仓库根目录的 `mob.config.json`，指定构建命令和相对本目录的输出目录。后端只接受静态产物；SSR 需要另做适配。
-
-管理界面放 `admin/` 下，并调用同域 `/api/admin/*`。公开界面调用 `/api/posts`。不要在前端代码里放 GitHub PAT、Cloudflare API token 或 R2 凭证。
-
-完整代码示例及接口连接方法见 [docs/FRONTEND.md](../docs/FRONTEND.md)。
-
-构建会保留 dist/client 根目录，只清理经过路径检查的子项并重试短暂文件占用，兼容 Windows 本地开发的目录 watcher；旧资源不会残留。
+新主题接入步骤、接口和验证要求见 [THEMES.md](../docs/THEMES.md)、[FRONTEND.md](../docs/FRONTEND.md)。参考素材与解析器许可保留在 Firefly 的 `assets/` 中。

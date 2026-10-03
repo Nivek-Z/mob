@@ -1,5 +1,8 @@
 # HTTP API
 
+维护前阅读 [平台守则](PLATFORM.md) 和 [主题协议](THEMES.md)：文本配置写 GitHub，媒体资源写 R2；公共资料、社交链接和友链统一管理；主题自行定义专属配置与前台/后台实现。
+
+
 同域地址：`https://你的博客域名`。本地默认 `http://localhost:8787`。接口路径不随前端框架变化，JSON 为 UTF-8。
 
 ## 通用规则
@@ -34,7 +37,7 @@
 | GET | `/api/health` | `{"status":"ok"}`，只表示 Worker 可响应，不检查 GitHub/R2/Access 配置 |
 | GET | `/api/posts` | `{items,total,limit,offset}`，已发布文章元数据，不含正文和 SHA |
 | GET | `/api/posts/:slug` | 已发布单篇正文；不含 SHA；草稿和不存在的文章均为 404 |
-| GET / HEAD | `/media/:id/:filename` | 至少被一篇已发布文章引用的文件；否则 404 |
+| GET / HEAD | `/media/:id/:filename` | 已发布文章、有效配置引用或显式图库公开的文件；否则 404 |
 
 列表参数：
 
@@ -191,3 +194,45 @@ url 是写进正文的稳定 URL。key/owner 仅供后台元数据使用。列�
 GraphQL 读取按文章数量和源文件字节数共同分批，给 JSON 转义预留空间。GitHub 请求失败日志只记录错误类别、HTTP 方法及上游状态码，不记录凭据、响应正文或原始异常消息。
 
 机器可读规范见 [openapi.yaml](openapi.yaml)。
+
+## 公共资料与主题配置
+
+| 方法 | 路径 | 返回 / 保存位置 |
+| --- | --- | --- |
+| GET | `/api/site` | `{value}`；`config/site/settings.json` |
+| GET / PUT | `/api/admin/settings/site` | `{sha,value,mediaIds}` / `{sha,value,commitSha}` |
+| GET | `/api/themes` | 已启用的注册清单；包含默认主题和访客切换开关 |
+| GET / PUT | `/api/admin/themes` | `{sha,value}`；`frontend/themes.json`，修改需部署 |
+| GET | `/api/themes/:id/config/:document` | `{value}`，仅启用主题 |
+| GET / PUT | `/api/admin/themes/:id/config/:document` | `{sha,value,mediaIds,declaration}` / `{sha,value,commitSha}`；主题声明目录 |
+
+PUT 请求仅接受 `{sha,value,mediaIds?}`；新文件 sha=null，已存在文件使用其当前 blob SHA。配置与 `<name>.references.json` 同 commit 保存。JSON 最多 512 KiB，嵌套最多 40 层，引用最多 200 个对象。`CONFIG_CONFLICT` 表示仓库或目标文件已变化；保留输入并重新加载合并。可选主题 JSON Schema 在 Workers 内校验，仅支持本地片段 `$ref`，不执行主题代码。
+
+共用站点对象要求 `title/description/profile:{name,bio,avatar}/socials/friends`；链接项为 `{label,url}`，社交与友链允许 HTTP(S)、mailto。可选 navigation 数组包含 `{label,url}`，允许站内相对路径或 HTTP(S)。不接受用户名/密码 URL。更多非秘密字段可由核心扩展，不允许复制成主题专属社交/友链。
+
+## 图床
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/gallery` | `{items,total,limit,offset}`，仅公开且展示的项目 |
+| GET | `/api/gallery/categories` | `{value:{items:[{id,name}]}}` |
+| GET | `/api/admin/gallery` | 同上并含索引 `sha`，包括私有项目 |
+| PATCH | `/api/admin/gallery` | `{sha,items:[{id,title?,description?,categoryId?,tags?,isPublic?,isListed?}]}` |
+| POST | `/api/admin/gallery/items` | `{id,source?}`，幂等登记已完成 R2 对象；返回 `{item,sha,commitSha?}` |
+| DELETE | `/api/admin/gallery/items/:id` | `{sha}`；检查全部文章和配置后删除展示记录与对象 |
+| POST | `/api/admin/gallery/import` | `{cursor?}`，每次最多 25 个现有 R2 记录；返回 `{imported,cursor,sha,commitSha?}` |
+| GET / PUT | `/api/admin/gallery/categories` | `{sha,value}`，写回 `config/gallery/categories.json` |
+
+列表参数为 `category/q/limit/offset`；limit 1–100 默认 40，offset 0–1000。管理界面每页 24 项。索引 `content/gallery/items.json` 最多 1000 项、512 KiB；一次 PATCH 最多 100 项，成功或失败整个提交保持一致。
+
+source 为 editor/gallery/theme/import，默认为 gallery；editor 默认归入 `article-images`，其余默认 gallery。新上传默认 `isPublic:false/isListed:false`。公开稳定链接不要求展示；展示要求同时公开。已发布文章或有效配置引用仍可公开链接；草稿正文不会随图库公开。
+
+分类 ID唯一；保留 `article-images`、`gallery` 两个默认 ID，可自由改显示名称。移除仍有项目的分类返回 `CATEGORY_IN_USE`。直接用旧 media DELETE 删除已登记项目返回 `GALLERY_MANAGED`，应使用图库删除接口。
+
+图库登记失败可重试同一 ID。删除先撤销文本公开记录，再删除 R2；后者失败可从已有媒体导入继续处理。被文章（含草稿）或任何配置（含停用主题）引用时返回 `MEDIA_IN_USE`，details 给出 articles/configs。
+
+## 音频与媒体种子
+
+上传额外支持 `audio/mpeg`（mp3）、`audio/wav`（wav）、`audio/ogg`（ogg/opus，保存为 ogg）、`audio/mp4`（m4a），均做有界文件头校验。上传会话 GET 在原字段外返回 `status` 及完成后的 `record`，便于网络中断后恢复。
+
+`GET/HEAD /theme-media/:id/:filename` 为可选主题预置图入口：根据已部署 `bundledMedia` 声明验证种子摘要，写 R2 后提供。原始主题 `assets/images/` 路径返回 404；新用户上传使用普通媒体 API。

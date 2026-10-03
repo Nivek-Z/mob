@@ -1,18 +1,22 @@
 # 前端如何接入
 
+维护前阅读 [平台守则](PLATFORM.md) 和 [主题协议](THEMES.md)：文本配置写 GitHub，媒体资源写 R2；公共资料、社交链接和友链统一管理；主题自行定义专属配置与前台/后台实现。
+
+
 ## 文件放哪里
 
-纯 HTML/CSS/JS 直接放仓库 `frontend/`：
+主题源码放在 `frontend/themes/<id>/`。`frontend/themes.json` 注册身份、可用性与默认主题；每个主题的 `theme.json` 声明路由和可编辑配置。
 
-```text
-frontend/index.html         博客首页
-frontend/css/site.css       公共样式
-frontend/js/site.js         公共页面逻辑
-frontend/admin/index.html   管理页面
-frontend/admin/editor.js    编辑逻辑
-```
+| 路径 | 作用 |
+| --- | --- |
+| `frontend/themes/<id>/index.html` | 主题首页 |
+| `frontend/themes/<id>/admin/` | 主题自己的后台 HTML、脚本与样式 |
+| `frontend/themes/<id>/config/` | 主题自己定义的 JSON、Schema、默认配置 |
+| `frontend/core/` | 可选客户端助手，无统一管理 UI要求 |
+| `config/site/settings.json` | 共用个人资料、社交、友链、导航 |
+| `config/gallery/categories.json` | 共用图床分类 |
 
-默认不编译，部署时复制到 `dist/client/`。`frontend/admin/index.html` 对应 `/admin/`；`frontend/index.html` 对应 `/`。README、隐藏文件、node_modules 不发布。不要直接改 dist，它会在下一次构建被替换。
+部署时复制静态产物到 `dist/client/`。README、AGENTS、隐藏文件和 node_modules 不发布；不要修改生成目录。主题的管理入口必须位于 `/admin/`，其管理资产必须位于本主题 `admin/`。不允许给后台建立未鉴权的公开别名。
 
 使用框架时，在 frontend 添加 package.json 与锁文件，通过 `mob.config.json` 配置安装、构建命令及输出目录。必须输出静态 HTML/CSS/JS；纯 CSR 或 SSG 都可以，SSR 不能直接放静态目录运行。默认前端 package 的 npm run build 输出 frontend/dist。
 
@@ -68,7 +72,7 @@ console.log(identity.email);
 
 ## 粘贴或拖放媒体
 
-把 input.files、drop 事件的 dataTransfer.files、paste 事件的 clipboardData.files 中的 File 交给上传函数。上传成功后用 MediaRecord.url 替换编辑器中的占位链接，用 MediaRecord.id 更新文章 mediaIds。
+把 input.files、drop 事件的 dataTransfer.files、paste 事件的 clipboardData.files 中的 File 交给上传函数。上传成功后先 POST `/api/admin/gallery/items`，请求 `{id: record.id, source: "editor"}`，默认分类为文章插图且私有。再用 MediaRecord.url 替换编辑器中的占位链接，用 MediaRecord.id 更新文章 mediaIds。
 
 ```js
 async function uploadMedia(file, onProgress = () => {}) {
@@ -105,12 +109,13 @@ async function uploadMedia(file, onProgress = () => {}) {
 const record = await uploadMedia(file, progress => {
   console.log("上传进度", Math.round(progress * 100) + "%");
 });
+await api('/api/admin/gallery/items', { method: 'POST', json: { id: record.id, source: 'editor' } });
 const imageMarkdown = "![" + record.filename + "](" + record.url + ")";
 const videoMarkdown = "[" + record.filename + "](" + record.url + ")";
 mediaIds = [...new Set([...mediaIds, record.id])];
 ```
 
-如果 file.type 为空，先根据允许的文件类型确定 MIME，再创建会话。支持 JPEG/PNG/GIF/WebP/AVIF/MP4/WebM，详见 API。不要把多文件 FormData 直接交给 body 接口。
+如果 file.type 为空，先根据允许的文件类型确定 MIME，再创建会话。支持 JPEG/PNG/GIF/WebP/AVIF/MP4/WebM/MP3/WAV/OGG/M4A，详见 API。不要把多文件 FormData 直接交给 body 接口。
 
 这个例子省略重试 UI。实际编辑器应保留正文、上传 id 和已完成的媒体记录：PUT 分片失败可重传该编号，complete 请求超时可重试；409 UPLOAD_INCOMPLETE 会告知缺失分片。24 小时过期后才重新创建会话。取消未完成会话：
 
@@ -122,7 +127,7 @@ await api("/api/admin/uploads/" + uploadId, { method: "DELETE" });
 
 ## 草稿预览
 
-草稿正文里的稳定媒体 URL 在发布前会返回 404，这是访问规则。编辑器预览时将展示地址换为：
+仅被草稿引用且未另外公开的稳定媒体 URL 返回 404。已公开图库、有效公共/主题配置或已发布文章的引用可以公开链接。编辑器预览时将展示地址换为：
 
 ```js
 const previewUrl = "/api/admin/media/" + encodeURIComponent(record.id) + "/file";
@@ -182,3 +187,15 @@ document.querySelector("h1").textContent = article.title;
 公开单篇提供 Markdown，不返回已渲染 HTML。原生 Markdown 视频链接默认是链接；可以让你的渲染器将受信任的媒体视频 URL 转成 video controls，或提供编辑器的视频组件。原生 video 使用稳定的 record.url，Range 请求由 API 支持。
 
 GitHub/R2/Access 凭证始终留在云端。前端只需要同域 API 和返回的媒体 URL。全部字段、状态码和上传限制见 [API.md](API.md)。
+
+## 主题配置与图床
+
+前台 GET `/api/site`、`/api/themes/<id>/config/<document>` 读取运行时最新值。后台 GET 对应管理接口获取 `sha/value/mediaIds`；PUT 只发送 `{sha,value,mediaIds?}`，保存回声明的仓库目录。`CONFIG_CONFLICT` 时保留输入，重新加载后合并，不能自动覆盖。注册清单变更需要构建部署。
+
+主题可选用 `core/upload.js` 的 `uploadTask(file, source, onProgress)` 和 `bindDrops(element, accept)`；也可以自行实现。重试任务复用会话与已完成对象，完成 R2 上传后幂等登记 GitHub 图库。公开 URL 和图库展示分别控制，草稿预览仍走鉴权路径。
+
+图床后台支持分页、分类、标签、说明、批量分类/公开设置、私有预览、稳定链接复制及删除。旧 R2 媒体通过 import 分页登记，保留原 ID。删除引用中的对象返回 `MEDIA_IN_USE`，引用包含草稿与停用主题配置。
+
+主题自身的默认装饰图使用可选 `bundledMedia` 声明作为部署种子：第一次访问固定 `/theme-media/<id>/<filename>` 写 R2，摘要验证后提供。新上传的用户资源始终直接进入 R2；不要用 GitHub 存储自定义上传文件。
+
+后台脚本与专属资产通过 `/admin/assets/<theme>/<file>` 加载，Worker 将其映射到主题 admin/；这样沿用现有 `/admin/*` Access 范围即可注入 JWT。原始 `/themes/<id>/admin/` 直达同样经过 Worker 鉴权，但主题 HTML应使用 canonical 管理资产地址，避免未覆盖的网关路径造成 401。

@@ -1,5 +1,8 @@
 # 部署与日常维护
 
+维护前阅读 [平台守则](PLATFORM.md) 和 [主题协议](THEMES.md)：文本配置写 GitHub，媒体资源写 R2；公共资料、社交链接和友链统一管理；主题自行定义专属配置与前台/后台实现。
+
+
 推荐全程控制台部署：见 [云端环境变量部署](CLOUD-DEPLOY.md)。下文仓库配置/本地引导仍可用；云端构建参数优先覆盖仓库默认值。
 
 ## 当前状态
@@ -156,11 +159,11 @@ GitHub Actions CI 是只读验证（Contents: read），不持有生产 PAT，�
 
 ## 7. 域名与权限检查
 
-使用最终域名验证公开 API、后台登录、文章保存和媒体上传。所有请求由 Worker 验证，公开媒体只允许已发布引用。
+使用最终域名验证公开 API、后台登录、文章保存和媒体上传。所有请求由 Worker 验证，公开媒体允许已发布文章、有效配置引用或显式图库公开。
 
 Worker 默认开启 workers.dev 与 preview_urls 方便首次部署。它们不自动继承自定义域名的 Access 登录入口；Worker 的 JWT 校验会拒绝未经认证的后台请求。正式运行建议在仓库关闭这两个入口，或给每个仍启用的入口配置相同 Access 保护。不要为绕过登录把 APP_ENV 改成 development。
 
-未配置 Access 时管理接口返回 503 CONFIGURATION_REQUIRED；没有页面时 /admin/ 完成鉴权后可能仍是 404。后端已预留这一入口，页面由你放入 frontend/admin/。
+未配置 Access 时管理接口返回 503 CONFIGURATION_REQUIRED；没有页面时 /admin/ 完成鉴权后可能仍是 404。后端已预留这一入口，页面由对应 frontend/themes/<id>/admin/ 提供。
 
 ## 8. 验收一次完整流程
 
@@ -193,3 +196,5 @@ R2 的 .mob/ 前缀是后端元数据，不作为媒体路径公开。可给 .mo
 - [Cloudflare 构建镜像与 .node-version](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)。
 - [Wrangler 自定义构建](https://developers.cloudflare.com/workers/wrangler/custom-builds/) / [Durable Object exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)。
 - [Access 路径规则](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/app-paths/) / [JWT 验证](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)。
+
+现有主题后台入口无需新增 Access范围：其脚本通过 /admin/assets/<id>/ 加载。主题切换、图床及配置新增功能仍使用已有 MEDIA和 MUTATIONS 绑定，不需要新的对象桶或数据库。保存配置写 GitHub，注册表/源码变更会按原 Builds 触发规则部署。
