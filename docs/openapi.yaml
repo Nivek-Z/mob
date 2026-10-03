@@ -216,7 +216,11 @@ paths:
         the returned filename; merged media references cannot exceed 200.
         INVALID_MEDIA_URL/TOO_MANY_MEDIA_REFERENCES reject invalid links. Writes
         are serialized by the global SQLite Durable Object; missing binding
-        returns COORDINATOR_NOT_CONFIGURED.
+        returns COORDINATOR_NOT_CONFIGURED. The projected repository index must
+        fit 500 articles and 32 MiB each for source and serialized index bytes;
+        otherwise 413 POST_INDEX_TOO_LARGE is returned before any Git write.
+        Editors must preserve extra mediaIds not detectable from current URLs
+        until they are explicitly removed.
       security:
         - CloudflareAccess: []
       parameters:
@@ -376,7 +380,7 @@ paths:
     post:
       operationId: cleanupUploads
       summary: Retire expired upload state while retaining completed media
-      description: Scans at most four upload directories per page. Pass the returned cursor until null. Newly cancelled uploads retain their tombstone for one day. Requires the mutation coordinator; no scheduled cleanup is configured.
+      description: Scans at most four upload directories per page. Pass the returned cursor until null. Newly cancelled uploads retain their tombstone for one day. Failed R2 cancellation returns 503 MEDIA_ABORT_FAILED and retains the session and uploadId; cleanup retries cancellation before deleting this state. Requires the mutation coordinator; no scheduled cleanup is configured.
       security:
         - CloudflareAccess: []
       parameters:

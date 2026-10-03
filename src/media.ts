@@ -310,9 +310,10 @@ export class MediaService {
     await this.transition(id, 'aborted');
     if (session.uploadId) {
       try { await this.env.MEDIA.resumeMultipartUpload(session.key, session.uploadId).abort(); }
-      catch {
-        // An already completed/aborted underlying upload has nothing left to abort.
-        // The tombstone still blocks completion; delete any final object below.
+      catch (error) {
+        // R2 appends its numeric error code to Error.message. Only NoSuchUpload
+        // confirms there are no parts left; outages must retain the upload ID.
+        if (!(error instanceof Error) || !/\(10024\)\s*$/.test(error.message)) throw new ApiError(503, 'MEDIA_ABORT_FAILED', 'The multipart upload could not be cancelled. Retry cancellation or cleanup.');
       }
     }
     await this.env.MEDIA.delete([session.key, recordKey(id)]);
@@ -340,6 +341,9 @@ export class MediaService {
         continue;
       }
       if (state.value.status === 'aborted' && Date.parse(state.value.at) + SESSION_TTL > Date.now()) continue;
+      // A previous cancellation may have tombstoned the session before R2
+      // failed. Confirm the parts are gone before discarding the retry state.
+      if (state.value.status === 'aborted' && session) await this.abortUpload(id, { subject: session.owner, email: '' });
       if (state.value.status === 'completed' && session && !await this.getMedia(id)) {
         // Completion claimed the bytes but its metadata write may have failed.
         const object = await this.env.MEDIA.head(session.key);

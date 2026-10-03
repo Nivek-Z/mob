@@ -7,6 +7,7 @@
   const preview = document.getElementById("preview");
   const remove = document.getElementById("remove");
   const file = document.getElementById("file");
+  const extraMedia = document.getElementById("media-refs");
   const fields = {
     title: document.getElementById("title"),
     slug: document.getElementById("slug"),
@@ -46,10 +47,11 @@
     form.inert = loading || deleting;
     form.querySelectorAll(".actions button").forEach(function (button) { button.disabled = loading || deleting || saving || uploading > 0; });
     Object.values(fields).forEach(function (field) { field.disabled = loading || deleting; });
+    extraMedia.disabled = loading || deleting;
     fields.slug.readOnly = Boolean(editing) || saving;
     file.disabled = loading || deleting || saving || uploading > 0;
   }
-  function collectIds() {
+  function detectedIds() {
     const found = (fields.markdown.value + "\n" + fields.cover.value).match(/(?:https?:)?\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g) || [];
     const ids = [];
     found.forEach(function (item) {
@@ -57,6 +59,9 @@
       if (id && ids.indexOf(id) < 0) ids.push(id);
     });
     return ids;
+  }
+  function collectIds() {
+    return [...new Set([...extraMedia.value.split(/[,，\s]+/).filter(Boolean), ...detectedIds()])];
   }
   function managedId(value) {
     try { const url = new URL(value, location.origin); return url.origin === location.origin ? /^\/media\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/[^/]+$/.exec(url.pathname)?.[1] || null : null; }
@@ -72,6 +77,8 @@
     fields.tags.value = post ? (post.tags || []).join(", ") : "";
     fields.cover.value = post ? post.cover || "" : "";
     fields.markdown.value = post ? post.markdown || "" : "";
+    const detected = new Set(detectedIds());
+    extraMedia.value = (post?.mediaIds || []).filter(id => !detected.has(id)).join(", ");
     dirty = false; revision++;
     document.getElementById("mode").textContent = post ? (post.status === "published" ? "已发布" : "草稿") : "新建";
     remove.hidden = !post;

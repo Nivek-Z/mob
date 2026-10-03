@@ -92,6 +92,8 @@ PUT 请求：
 
 未知字段会拒绝。保存会验证 mediaIds，且自动收集正文/封面里属于本站 `/media/<id>/<filename>` 的媒体 id；前端仍应显式维护 mediaIds。合并后的引用最多 200 个，否则 422 TOO_MANY_MEDIA_REFERENCES。稳定 URL 的文件名必须与上传记录一致，否则 INVALID_MEDIA_URL（路径不匹配为 422，非法 URL 编码为 400）。后台预览 URL 写进正文会返回 422 PRIVATE_PREVIEW_LINK。
 
+编辑已有文章时，保留原 mediaIds 中不能从正文/封面自动识别的额外引用；只有显式移除时才删除它们。两个内置编辑器提供“额外媒体引用”输入框，自动 URL 引用随正文与封面重新计算。
+
 服务器管理时间字段：新建 createdAt；每次保存 updatedAt；第一次发布设置 publishedAt，转草稿及重新发布保留首次发布时间。尚未发布的草稿 publishedAt 为 null。
 
 DELETE 请求：
@@ -187,14 +189,17 @@ url 是写进正文的稳定 URL。key/owner 仅供后台元数据使用；从 G
 | 409 | MEDIA_IN_USE | 先解除文章引用 |
 | 409 | UPLOAD_INCOMPLETE | 补传缺失分片 |
 | 410 | UPLOAD_EXPIRED、UPLOAD_CLOSED | 创建新上传会话 |
-| 413 | BODY_TOO_LARGE、MEDIA_TOO_LARGE | 缩小文件或检查大小配置 |
+| 413 | BODY_TOO_LARGE、MEDIA_TOO_LARGE、POST_INDEX_TOO_LARGE | 缩小文件或文章索引，保留未保存内容 |
 | 415 | JSON_REQUIRED、UNSUPPORTED_MEDIA_TYPE | 修正 Content-Type/文件类型 |
 | 422 | MEDIA_NOT_READY、PRIVATE_PREVIEW_LINK、INVALID_MEDIA_URL、TOO_MANY_MEDIA_REFERENCES、INVALID_POST_CONTENT | 完成上传、使用完整稳定 URL，或减少媒体引用 |
 | 502 / 503 | GITHUB_UNAVAILABLE、GITHUB_ACCESS_DENIED、GITHUB_RATE_LIMITED、MEDIA_STORAGE_ERROR、COORDINATOR_NOT_CONFIGURED | 保留编辑内容稍后重试；管理端检查配置 |
 | 503 | GITHUB_REQUEST_FAILED | Worker 无法启动 GitHub 请求，查看运行日志与调用方式 |
+| 503 | MEDIA_ABORT_FAILED | R2 取消分片失败，会话保留；重试取消或过期清理 |
 | 504 | GITHUB_TIMEOUT | GitHub 请求超时，保留内容后重试 |
 
 上游错误经过脱敏，不返回 PAT。GitHub 索引最多 500 篇，源文件总大小与序列化索引大小分别最多 32 MiB，超过返回 POST_INDEX_TOO_LARGE，不静默截断。公开仓库也需要 runtime GITHUB_TOKEN（GraphQL 批量读取不能匿名）。文章 PUT/DELETE、媒体 DELETE 由全局 SQLite Durable Object 协调，前端接口不变；缺绑定时返回 COORDINATOR_NOT_CONFIGURED。GET 健康检查通过不能证明外部服务或协调器可写。
+
+文章 PUT 在提交前读取固定 HEAD 的文章快照，检查替换当前文章后的数量、源文件总大小与序列化索引大小。超限返回 413 POST_INDEX_TOO_LARGE，不写 Git；读取既有超限仓库仍返回 502。达到数量上限时仍可编辑已有文章；直接在 GitHub 写入造成的大小超限，可以通过缩小文章或删除文章恢复。
 
 GraphQL 读取按文章数量和源文件字节数共同分批，给 JSON 转义预留空间。GitHub 请求失败日志只记录错误类别、HTTP 方法及上游状态码，不记录凭据、响应正文或原始异常消息。
 

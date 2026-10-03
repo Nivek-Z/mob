@@ -161,6 +161,27 @@ beforeEach(() => {
 afterAll(async () => { await mf?.dispose(); }, 30000);
 
 describe('Cloudflare runtime integration', () => {
+  it('refuses article 501 through the coordinator without breaking the existing public index', async () => {
+    for (let index = 0; index < 498; index++) storePost(`capacity-${index}`, 'draft');
+    const before = head;
+    const rejected = await request('/api/admin/posts/extra', 'PUT', { sha: null, title: 'Extra', markdown: 'Text', status: 'draft' }, true);
+    expect(rejected.status).toBe(413);
+    expect((await data(rejected)).error?.code).toBe('POST_INDEX_TOO_LARGE');
+    expect(head).toBe(before);
+    expect(files.has('content/posts/extra.md')).toBe(false);
+    expect((await data(await request('/api/posts'))).data.total).toBe(1);
+    const sha = files.get('content/posts/public.md')!.sha;
+    expect((await request('/api/admin/posts/public', 'PUT', { sha, title: 'Still editable', markdown: 'Text', status: 'published' }, true)).status).toBe(200);
+    expect((await data(await request('/api/posts/public'))).data.title).toBe('Still editable');
+  });
+  it('cancels multipart uploads idempotently after native R2 has already aborted them', async () => {
+    const session = (await data(await request('/api/admin/uploads', 'POST', { filename: 'video.mp4', contentType: 'video/mp4', size: partSize + 32 }, true))).data;
+    const bucket = await mf.getR2Bucket('MEDIA');
+    await bucket.resumeMultipartUpload(session.key, session.uploadId).abort();
+    expect((await request(`/api/admin/uploads/${session.id}`, 'DELETE', undefined, true)).status).toBe(200);
+    expect((await request(`/api/admin/uploads/${session.id}`, 'DELETE', undefined, true)).status).toBe(200);
+    expect((await request(`/api/admin/uploads/${session.id}/complete`, 'POST', {}, true)).status).toBe(410);
+  });
   it('releases unused native R2 streams for theme-seed HEAD and conditional responses', async () => {
     const first = await request('/theme-media/firefly/hero.avif'); expect(first.status).toBe(200);
     const head = await request('/theme-media/firefly/hero.avif', 'HEAD'); expect(head.status).toBe(200);

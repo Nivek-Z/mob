@@ -37,6 +37,47 @@ async function uploadPng() {
 }
 
 describe('upload housekeeping', () => {
+  it('retains failed cancellation state until cleanup successfully retries R2 abort', async () => {
+    vi.useFakeTimers();
+    const session = await service.createUpload({ filename: 'video.mp4', contentType: 'video/mp4', size: PART_SIZE + 20 }, admin);
+    await service.uploadPart(session.id, 1, body(mp4(PART_SIZE)), admin);
+    const resume = bucket.resumeMultipartUpload.bind(bucket);
+    let unavailable = true;
+    vi.spyOn(bucket, 'resumeMultipartUpload').mockImplementation((key, id) => {
+      const upload = resume(key, id);
+      return { ...upload, abort: async () => {
+        if (unavailable) throw new Error('R2 unavailable (10043)');
+        await upload.abort();
+      } };
+    });
+    await expect(service.abortUpload(session.id, admin)).rejects.toMatchObject({ status: 503, code: 'MEDIA_ABORT_FAILED' });
+    expect(bucket.uploads.get(session.uploadId!)?.parts.size).toBe(1);
+    vi.advanceTimersByTime(2 * 86_400_000 + 1);
+    await expect(service.cleanupUploads()).rejects.toMatchObject({ code: 'MEDIA_ABORT_FAILED' });
+    expect(await bucket.head(`.mob/uploads/${session.id}/session.json`)).not.toBeNull();
+    expect(await bucket.head(`.mob/uploads/${session.id}/parts/1.json`)).not.toBeNull();
+    expect(await bucket.head(`.mob/uploads/${session.id}/state.json`)).not.toBeNull();
+    unavailable = false;
+    expect(await service.cleanupUploads()).toMatchObject({ cleaned: 1 });
+    expect(bucket.uploads.has(session.uploadId!)).toBe(false);
+    expect(await bucket.head(`.mob/uploads/${session.id}/session.json`)).toBeNull();
+  });
+  it('keeps expiry cancellation retryable and accepts confirmed missing multipart uploads', async () => {
+    vi.useFakeTimers();
+    const session = await service.createUpload({ filename: 'video.mp4', contentType: 'video/mp4', size: PART_SIZE + 20 }, admin);
+    const resume = bucket.resumeMultipartUpload.bind(bucket);
+    const failure = vi.spyOn(bucket, 'resumeMultipartUpload').mockImplementation((key, id) => ({ ...resume(key, id), abort: async () => { throw new Error('R2 unavailable (10001)'); } }));
+    vi.advanceTimersByTime(86_400_001);
+    await expect(service.cleanupUploads()).rejects.toMatchObject({ code: 'MEDIA_ABORT_FAILED' });
+    expect(await bucket.head(`.mob/uploads/${session.id}/session.json`)).not.toBeNull();
+    failure.mockRestore();
+    await expect(service.abortUpload(session.id, admin)).resolves.toBeUndefined();
+    // Repeated cancellation returns NoSuchUpload from the fake, as R2 does
+    // when its upload has expired or no longer exists.
+    await expect(service.abortUpload(session.id, admin)).resolves.toBeUndefined();
+    vi.advanceTimersByTime(86_400_001);
+    expect(await service.cleanupUploads()).toMatchObject({ cleaned: 1 });
+  });
   it('retains a retryable session and tombstone when part cleanup fails', async () => {
     vi.useFakeTimers();
     const { session, record } = await uploadPng();
