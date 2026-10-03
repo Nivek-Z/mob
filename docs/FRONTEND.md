@@ -76,6 +76,8 @@ console.log(identity.email);
 
 把 input.files、drop 事件的 dataTransfer.files、paste 事件的 clipboardData.files 中的 File 交给上传函数。上传成功后先 POST `/api/admin/gallery/items`，请求 `{id: record.id, source: "editor"}`，默认分类为文章插图且私有。再用 MediaRecord.url 替换编辑器中的占位链接，用 MediaRecord.id 更新文章 mediaIds。
 
+加载已有文章时，将原 mediaIds 中无法从当前正文/封面 URL 自动识别的 ID 保留为额外引用。保存时合并额外引用与当前自动引用；不能在仅修改标题时清空额外引用，也不能把已移除 URL 的旧自动引用永久保留。内置编辑器允许在“额外媒体引用”中显式移除这些 ID。
+
 ```js
 async function uploadMedia(file, onProgress = () => {}) {
   const session = await api("/api/admin/uploads", {

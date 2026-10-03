@@ -61,6 +61,36 @@ describe('GitHub article source format', () => {
 });
 
 describe('GitHub article operations', () => {
+  it('rejects article 501 before writing and still allows edits at the count limit', async () => {
+    const f = fixture();
+    for (let index = 0; index < 500; index++) f.files.set(`content/posts/post-${index}.md`, { sha: originalSha, content: serializePost(basePost()) });
+    await expect(f.posts.savePost('extra', createInput())).rejects.toMatchObject({ status: 413, code: 'POST_INDEX_TOO_LARGE' });
+    expect(f.fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    expect(await f.posts.listPosts()).toHaveLength(500);
+    await f.posts.savePost('post-0', createInput({ sha: originalSha, title: 'Updated at capacity' }));
+    expect(await f.posts.listPosts()).toHaveLength(500);
+    expect((await f.posts.getPost('post-0'))?.title).toBe('Updated at capacity');
+  });
+  it('rejects aggregate source growth before committing and allows an edit that reduces it', async () => {
+    const f = fixture();
+    const large = serializePost(basePost({ markdown: 'x'.repeat(512 * 1024) }));
+    for (let index = 0; index < 63; index++) f.files.set(`content/posts/large-${index}.md`, { sha: originalSha, content: large });
+    await expect(f.posts.savePost('extra', createInput({ markdown: 'x'.repeat(512 * 1024) }))).rejects.toMatchObject({ status: 413, code: 'POST_INDEX_TOO_LARGE' });
+    expect(f.fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    // A repository edited outside the Worker can already be oversized. Exclude
+    // the old target before validation so shrinking it can restore the index.
+    f.files.set('content/posts/extra.md', { sha: originalSha, content: large });
+    await f.posts.savePost('extra', createInput({ sha: originalSha, markdown: 'short' }));
+    expect(await f.posts.listPosts()).toHaveLength(64);
+  });
+  it('checks projected JSON expansion even when source bytes fit', async () => {
+    const f = fixture(false);
+    const escaped = serializePost(basePost({ markdown: '\t'.repeat(512 * 1024) }));
+    for (let index = 0; index < 31; index++) f.files.set(`content/posts/escaped-${index}.md`, { sha: originalSha, content: escaped });
+    await expect(f.posts.savePost('extra', createInput({ markdown: '\t'.repeat(512 * 1024) }))).rejects.toMatchObject({ status: 413, code: 'POST_INDEX_TOO_LARGE' });
+    expect(f.fetcher.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    expect(await f.posts.listPosts()).toHaveLength(31);
+  });
   it('creates a draft with media links and then publishes while preserving creation time', async () => {
     const f = fixture();
     const draft = await f.posts.savePost('first-post', createInput({ markdown: '![图](https://media.example.com/photo.webp)' }));

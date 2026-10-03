@@ -122,19 +122,17 @@ export class GithubPosts {
     }
     this.cacheKeys.clear();
   }
-  async listPosts(force = false): Promise<Post[]> {
-    // Always check branch head. A cached published article must disappear as soon as its withdrawal commits.
-    const head = await this.github.readHead();
-    if (head === null) return [];
-    if (!force) { const cached = await this.cachedIndex(head); if (cached) return cached; }
+  private async readIndex(head: string, replacement?: { post: Post; source: string }): Promise<Post[]> {
     const prefix = `${this.directory}/`;
-    const entries = (await this.github.readTree(head)).filter((entry) => entry.path.startsWith(prefix) && entry.path.endsWith('.md'));
-    if (entries.length > MAX_POSTS) throw new ApiError(502, 'POST_INDEX_TOO_LARGE', 'The article directory exceeds the supported limit of 500 articles.');
-    if (entries.reduce((total, entry) => total + (entry.size ?? 0), 0) > MAX_INDEX_BYTES) throw new ApiError(502, 'POST_INDEX_TOO_LARGE', 'Article sources exceed the supported total size of 32 MiB.');
+    const entries = (await this.github.readTree(head)).filter((entry) => entry.path.startsWith(prefix) && entry.path.endsWith('.md') && entry.path !== (replacement ? `${prefix}${replacement.post.slug}.md` : null));
+    const fail = (message: string): never => { throw new ApiError(replacement ? 413 : 502, 'POST_INDEX_TOO_LARGE', message); };
+    const replacementBytes = replacement ? encoder.encode(replacement.source).byteLength : 0;
+    if (entries.length + (replacement ? 1 : 0) > MAX_POSTS) fail('The article directory exceeds the supported limit of 500 articles.');
+    if (entries.reduce((total, entry) => total + (entry.size ?? 0), replacementBytes) > MAX_INDEX_BYTES) fail('Article sources exceed the supported total size of 32 MiB.');
     for (const entry of entries) {
       try { validateSlug(entry.path.slice(prefix.length, -3)); } catch { throw new ApiError(422, 'INVALID_POST_CONTENT', 'Article filenames must be valid slugs in the configured article directory.'); }
     }
-    const posts: Post[] = []; let totalSourceBytes = 0;
+    const posts: Post[] = replacement ? [replacement.post] : []; let totalSourceBytes = replacementBytes;
     // Small articles still use batches of 20. At the maximum supported file size,
     // at least 12 fit: 500 articles need at most 42 reads + HEAD + tree.
     // Bound source bytes as well as count, since JSON can double the source size.
@@ -150,7 +148,7 @@ export class GithubPosts {
       for (const entry of batch) {
         const source = sources.get(entry.sha)!;
         totalSourceBytes += encoder.encode(source).byteLength;
-        if (totalSourceBytes > MAX_INDEX_BYTES) throw new ApiError(502, 'POST_INDEX_TOO_LARGE', 'Article sources exceed the supported total size of 32 MiB.');
+        if (totalSourceBytes > MAX_INDEX_BYTES) fail('Article sources exceed the supported total size of 32 MiB.');
         posts.push(parsePost(entry.path.slice(prefix.length, -3), entry.sha, source));
       }
     }
@@ -161,8 +159,17 @@ export class GithubPosts {
       // Serialize only one bounded article at a time. This counts every JSON
       // escape, including tabs, before allocating the complete index.
       serializedBytes += encoder.encode(JSON.stringify(post)).byteLength + (index > 0 ? 1 : 0);
-      if (serializedBytes > MAX_INDEX_BYTES) throw new ApiError(502, 'POST_INDEX_TOO_LARGE', 'The serialized article index exceeds the supported size of 32 MiB.');
+      if (serializedBytes > MAX_INDEX_BYTES) fail('The serialized article index exceeds the supported size of 32 MiB.');
     }
+    return posts;
+  }
+  async listPosts(force = false): Promise<Post[]> {
+    // Always check branch head. A cached published article must disappear as soon as its withdrawal commits.
+    const head = await this.github.readHead();
+    if (head === null) return [];
+    if (!force) { const cached = await this.cachedIndex(head); if (cached) return cached; }
+    const posts = await this.readIndex(head);
+    const envelope = { version: 1, namespace: this.namespace, head, savedAt: Date.now(), posts };
     const serialized = JSON.stringify(envelope);
     if (this.cacheSeconds() > 0) {
       try {
@@ -186,7 +193,13 @@ export class GithubPosts {
     if ((input.sha === null && existing !== null) || (input.sha !== null && existing?.sha !== input.sha)) throw new ApiError(409, 'POST_CONFLICT', 'The article changed. Reload it before saving.');
     const now = new Date().toISOString();
     const post: Post = { slug, sha: input.sha ?? '', title: input.title, markdown: input.markdown, status: input.status, description: input.description ?? '', tags: input.tags ?? [], cover: input.cover ?? null, mediaIds: input.mediaIds ?? [], createdAt: existing?.createdAt ?? now, updatedAt: now, publishedAt: existing?.publishedAt ?? (input.status === 'published' ? now : null) };
-    const result = await this.github.writeFile(`${this.directory}/${slug}.md`, serializePost(post), input.sha, `blog: ${existing ? 'update' : 'create'} ${slug}`);
+    const source = serializePost(post);
+    const head = await this.github.readHead();
+    // Inspect the projected immutable snapshot inside the mutation queue. A new
+    // article or larger edit must not commit an index that no reader can load.
+    // Blob SHAs are always 40 characters; the eventual value cannot affect size.
+    if (head) await this.readIndex(head, { post: { ...post, sha: '0'.repeat(40) }, source });
+    const result = await this.github.writeFile(`${this.directory}/${slug}.md`, source, input.sha, `blog: ${existing ? 'update' : 'create'} ${slug}`);
     await this.invalidateCache();
     return { post: { ...post, sha: result.sha }, commitSha: result.commitSha };
   }

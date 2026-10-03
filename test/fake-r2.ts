@@ -83,7 +83,7 @@ export class FakeR2Bucket {
   resumeMultipartUpload(key: string, uploadId: string): R2MultipartUpload {
     const bucket = this;
     function state(): MultipartState {
-      const value = bucket.uploads.get(uploadId); if (!value || value.key !== key) throw new Error('Multipart upload does not exist.'); return value;
+      const value = bucket.uploads.get(uploadId); if (!value || value.key !== key) throw new Error('The specified multipart upload does not exist. (10024)'); return value;
     }
     return { key, uploadId,
       async uploadPart(partNumber: number, value: unknown) {

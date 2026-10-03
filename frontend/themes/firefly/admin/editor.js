@@ -6,6 +6,7 @@
     list = document.getElementById("post-list"),
     note = document.getElementById("note"),
     preview = document.getElementById("preview");
+  const extraMedia = document.getElementById("media-refs");
   const fields = Object.fromEntries(
     ["title", "slug", "description", "tags", "cover", "markdown"].map((k) => [
       k,
@@ -31,6 +32,7 @@
   function state() {
     form.inert = loading || deleting;
     Object.values(fields).forEach(field => { field.disabled = loading || deleting; });
+    extraMedia.disabled = loading || deleting;
     fields.slug.disabled = loading || saving || deleting;
     ['file', 'cover-file'].forEach(id => { document.getElementById(id).disabled = loading || saving || deleting; });
     ui.setDirty(dirty, saving || uploading > 0 || loading);
@@ -71,7 +73,7 @@
     if (immediate) renderPreview();
     else previewTimer = setTimeout(renderPreview, 180);
   }
-  function collectIds() {
+  function detectedIds() {
     return [
       ...new Set(
         (fields.markdown.value + "\n" + fields.cover.value)
@@ -82,6 +84,9 @@
           .filter(Boolean) || [],
       ),
     ].slice(0, 200);
+  }
+  function collectIds() {
+    return [...new Set([...extraMedia.value.split(/[,，\s]+/).filter(Boolean), ...detectedIds()])];
   }
   function fill(post) {
     editing = post?.slug || "";
@@ -94,6 +99,8 @@
           : post[key] || ""
         : "";
     });
+    const detected = new Set(detectedIds());
+    extraMedia.value = (post?.mediaIds || []).filter(id => !detected.has(id)).join(", ");
     fields.slug.readOnly = Boolean(post);
     slugManual = Boolean(post);
     dirty = false;
