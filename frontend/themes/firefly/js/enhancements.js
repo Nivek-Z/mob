@@ -5,7 +5,7 @@
   function placePicker() {
     const picker = document.querySelector(".layout-picker");
     if (!picker || !header || !menu) return;
-    const parent = innerWidth <= 768 ? menu : header;
+    const parent = innerWidth <= 1100 ? menu : header;
     if (picker.parentElement !== parent) parent.append(picker);
   }
   if (header && menu) {

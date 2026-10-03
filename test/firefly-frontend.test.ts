@@ -46,6 +46,10 @@ describe("Firefly-Mod visitor experience", () => {
     (win.document.querySelector(".header-actions") as any).append(picker);
     await tick();
     expect(picker.parentElement!.id).toBe("mobile-menu");
+    Object.defineProperty(win, "innerWidth", { value: 980, writable: true });
+    win.dispatchEvent(new win.Event("resize"));
+    await tick();
+    expect(picker.parentElement!.id).toBe("mobile-menu");
     Object.defineProperty(win, "innerWidth", { value: 1440, writable: true });
     win.dispatchEvent(new win.Event("resize"));
     await tick();

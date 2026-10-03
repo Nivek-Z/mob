@@ -34,7 +34,7 @@
       if (!menu.hidden && !menu.contains(event.target) && !menuButton.contains(event.target)) closeMenu();
     });
     document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeMenu(); });
-    window.addEventListener("resize", function () { if (window.innerWidth > 768) closeMenu(); });
+    window.addEventListener("resize", function () { if (window.innerWidth > 1100) closeMenu(); });
   }
   document.querySelectorAll("[data-year]").forEach(function (node) { node.textContent = new Date().getFullYear(); });
   if (!reduced.matches && "IntersectionObserver" in window) {
