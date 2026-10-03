@@ -294,6 +294,29 @@ async function uploadFixture(filename = 'photo.png', contentType = 'image/png') 
   expect(response.status).toBe(200); return (await data(response)).data;
 }
 describe('platform integration in workerd', () => {
+  it('uses the public reference snapshot only after checking live HEAD and revokes cached media on config changes', async () => {
+    const record = await uploadFixture();
+    const path = 'frontend/themes/firefly/config/appearance.json';
+    const original = files.get(path)!.content;
+    const value = JSON.parse(original); value.hero.cover = record.url;
+    storeFile(path, JSON.stringify(value)); revision++; head = digest(String(revision));
+    const mediaPath = new URL(record.url).pathname;
+    let before = githubRequests;
+    expect((await request(mediaPath)).status).toBe(200);
+    const cold = githubRequests - before;
+    const bucket = await mf.getR2Bucket('MEDIA');
+    const cache = await bucket.get('.mob/settings/public-references.json');
+    expect((await cache!.json() as { head: string }).head).toBe(head);
+    before = githubRequests;
+    expect((await request(mediaPath)).status).toBe(200);
+    const warm = githubRequests - before;
+    expect(warm).toBe(3); // Article HEAD, gallery document, configuration HEAD.
+    expect(cold).toBeGreaterThan(warm);
+    upstreamStatus = 502;
+    expect((await request(mediaPath)).status).toBe(502); upstreamStatus = 0;
+    storeFile(path, original); revision++; head = digest(String(revision));
+    expect((await request(mediaPath)).status).toBe(404);
+  });
   it('preserves an existing gallery item when another upload is registered and retried', async () => {
     const existing = await uploadFixture('existing.png');
     const first = (await data(await request('/api/admin/gallery/items', 'POST', { id: existing.id, source: 'theme' }, true))).data;

@@ -48,6 +48,9 @@ async function assetJson(env: Env, origin: string, path: string): Promise<unknow
 }
 export async function routeTheme(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  // Theme routes cannot alias this reserved prefix. Protected assets still pass
+  // through the normal path after the app's Access checks; HTML keeps Vary Cookie.
+  if (url.pathname.startsWith('/themes/') && !isAdminAsset(url.pathname)) return env.ASSETS.fetch(request);
   const declared = await assetJson(env, url.origin, '/themes.json');
   if (!declared) return env.ASSETS.fetch(request);
   const registration = registry(declared);

@@ -1,7 +1,7 @@
 import { Validator, type Schema } from '@cfworker/json-schema';
 import { ApiError, object, requireId } from './http';
 import { GitHubClient, validSha } from './github';
-import { registry, manifest, type ThemeConfig } from './themes';
+import { registry, manifest, themePath } from './themes';
 import { siteOrigin } from './config';
 import { MediaService } from './media';
 import type { Env } from './types';
@@ -11,6 +11,9 @@ export const SITE_PATH = 'config/site/settings.json';
 export const THEMES_PATH = 'frontend/themes.json';
 export const CATEGORIES_PATH = 'config/gallery/categories.json';
 export const GALLERY_PATH = 'content/gallery/items.json';
+const PUBLIC_REFERENCES_KEY = '.mob/settings/public-references.json';
+const MAX_REFERENCE_CACHE_BYTES = 2 * 1024 * 1024;
+const COMMON_REFERENCE_PATHS = new Set([SITE_PATH, CATEGORIES_PATH, THEMES_PATH].flatMap(path => [path, path.replace(/\.json$/, '.references.json')]));
 export const DEFAULT_CATEGORIES = { items: [{ id: 'article-images', name: '文章插图' }, { id: 'gallery', name: '日常影像' }] };
 export function parseDocument(content: string): unknown {
   try { return JSON.parse(content); } catch { throw new ApiError(503, 'INVALID_STORED_CONFIG', 'The repository contains an invalid JSON document.'); }
@@ -133,8 +136,8 @@ export class SettingsService {
     const declared = await this.themeConfig(id, document);
     if (!admin && !declared.theme.enabled) throw new ApiError(404, 'THEME_NOT_FOUND', 'Theme disabled.');
     const fallback = declared.config.defaultPath ? (await this.read(declared.root + declared.config.defaultPath)).value : {};
-    const result = await this.read(declared.path, fallback);
-    return admin ? { ...await this.edit(declared.path, fallback), declaration: declared.config } : { value: result.value };
+    if (admin) return { ...await this.edit(declared.path, fallback), declaration: declared.config };
+    return { value: (await this.read(declared.path, fallback)).value };
   }
   async save(path: string, inputValue: unknown, validate?: (value: unknown) => void) {
     const input = saveInput(inputValue); validate?.(input.value);
@@ -170,9 +173,41 @@ export class SettingsService {
     }
     return this.save(declared.path, input);
   }
-  /** One Git snapshot and batched blobs, including disabled themes for deletion protection. */
+  private referenceNamespace(): string {
+    return JSON.stringify([this.env.GITHUB_OWNER, this.env.GITHUB_REPO, this.env.GITHUB_BRANCH, siteOrigin(this.env)]);
+  }
+  private async cachedPublicReferences(head: string): Promise<Map<string, string[]> | null> {
+    try {
+      const cached = await this.env.MEDIA.get(PUBLIC_REFERENCES_KEY);
+      if (!cached) return null;
+      if (cached.size > MAX_REFERENCE_CACHE_BYTES) { await cached.body.cancel(); return null; }
+      const data = await cached.json<{ version: number; namespace: string; head: string; refs: [string, string[]][] }>();
+      if (data.version !== 1 || data.namespace !== this.referenceNamespace() || data.head !== head || !Array.isArray(data.refs) || data.refs.length > 13600) return null;
+      const index = new Map<string, string[]>(); let count = 0;
+      for (const entry of data.refs) {
+        if (!Array.isArray(entry) || entry.length !== 2) return null;
+        const [id, paths] = entry; requireId(id);
+        if (index.has(id) || !Array.isArray(paths) || !paths.length || paths.length > 68) return null;
+        for (const path of paths) if (!themePath(path) || !(COMMON_REFERENCE_PATHS.has(path) || /^frontend\/themes\/[a-z0-9-]+\/config\/.+\.json$/.test(path))) return null;
+        count += paths.length; if (count > 13600) return null;
+        index.set(id, paths);
+      }
+      return index;
+    } catch { return null; } // A disposable cache must never make repository reads fail.
+  }
+  private async cachePublicReferences(head: string, index: Map<string, string[]>): Promise<void> {
+    try {
+      const content = JSON.stringify({ version: 1, namespace: this.referenceNamespace(), head, refs: [...index] });
+      if (new TextEncoder().encode(content).length <= MAX_REFERENCE_CACHE_BYTES) await this.env.MEDIA.put(PUBLIC_REFERENCES_KEY, content, { httpMetadata: { contentType: 'application/json' } });
+    } catch { /* GitHub remains authoritative when R2 is unavailable. */ }
+  }
+  /** Read live HEAD before a snapshot cache; deletion checks include disabled themes. */
   async usage(id: string, publicOnly = false): Promise<string[]> {
     const head = await this.github.readHead(); if (!head) return [];
+    if (publicOnly) {
+      const cached = await this.cachedPublicReferences(head);
+      if (cached) return cached.get(id) ?? [];
+    }
     const tree = await this.github.readTree(head); const byPath = new Map(tree.map(entry => [entry.path, entry]));
     const regEntry = byPath.get(THEMES_PATH);
     const registration = regEntry ? registry(parseDocument(await this.github.readBlob(regEntry.sha))) : null;
@@ -190,11 +225,16 @@ export class SettingsService {
     }
     if (paths.length > 34) throw new ApiError(503, 'TOO_MANY_CONFIGS', 'The platform supports 31 theme and three common configuration documents.');
     const files = paths.flatMap(path => [path, path.replace(/\.json$/, '.references.json')]).filter(path => byPath.has(path));
-    const result: string[] = [];
+    const index = new Map<string, string[]>();
     for (let at = 0; at < files.length; at += 10) {
       const chunk = files.slice(at, at + 10); const sources = await this.github.readBlobs(chunk.map(path => byPath.get(path)!.sha));
-      for (const path of chunk) if (references(parseDocument(sources.get(byPath.get(path)!.sha)!), this.env, path.endsWith('.references.json') ? (object(parseDocument(sources.get(byPath.get(path)!.sha)!)).mediaIds ?? []) as string[] : []).ids.includes(id)) result.push(path);
+      for (const path of chunk) {
+        const value = parseDocument(sources.get(byPath.get(path)!.sha)!);
+        const ids = references(value, this.env, path.endsWith('.references.json') ? (object(value).mediaIds ?? []) as string[] : []).ids;
+        for (const reference of ids) if (publicOnly || reference === id) index.set(reference, [...(index.get(reference) ?? []), path]);
+      }
     }
-    return result;
+    if (publicOnly) await this.cachePublicReferences(head, index);
+    return index.get(id) ?? [];
   }
 }

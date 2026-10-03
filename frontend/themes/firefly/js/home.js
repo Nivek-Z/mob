@@ -60,6 +60,7 @@
   let activeScene = -1;
   let animationFrame = 0;
   let measurements = {};
+  let painted = {};
   const tiles = [];
   const idle = [0, 4, 9, 13, 18, 23];
   for (let index = 0; index < 24; index++) {
@@ -75,15 +76,20 @@
   function measure() {
     function region(node) {
       const rect = node.getBoundingClientRect();
-      return { top: rect.top + window.scrollY, distance: Math.max(1, node.offsetHeight - window.innerHeight) };
+      const height = node.offsetHeight;
+      return { top: rect.top + window.scrollY, end: rect.top + window.scrollY + height, distance: Math.max(1, height - window.innerHeight) };
     }
     measurements.hero = region(hero);
     measurements.blinds = region(blinds);
     measurements.story = region(story);
     measurements.step = scenes.length > 1 ? scenes[1].offsetLeft - scenes[0].offsetLeft : 0;
+    // Resize and mode/config changes can reset styles even at the same progress.
+    painted = {};
     requestUpdate();
   }
   function paintHero(progress) {
+    if (painted.hero === progress) return;
+    painted.hero = progress;
     heroProgress = progress;
     const assemble = smooth(range(progress, .02, .52));
     tiles.forEach(function (tile, index) {
@@ -107,9 +113,10 @@
     bottom.style.opacity = String(1 - range(progress, .75, .95));
     bottom.inert = progress > .92;
     canvas.style.opacity = String(range(progress, .62, .85) * .4);
-    syncRain();
   }
   function paintBlinds(progress) {
+    if (painted.blinds === progress) return;
+    painted.blinds = progress;
     const open = smooth(range(progress, .08, .8));
     blindLeft.style.transform = "translateX(" + (-open * 100).toFixed(2) + "%)";
     blindRight.style.transform = "translateX(" + (open * 100).toFixed(2) + "%)";
@@ -118,6 +125,8 @@
     foreground.style.transform = "translateY(" + (-open * 45).toFixed(1) + "px) scale(" + (1.05 + open * .06).toFixed(3) + ")";
   }
   function paintStory(progress) {
+    if (painted.story === progress) return;
+    painted.story = progress;
     track.style.transform = "translate3d(" + (-progress * measurements.step * (scenes.length - 1)).toFixed(2) + "px,0,0)";
     const next = Math.round(progress * (scenes.length - 1));
     if (next !== activeScene) {
@@ -137,8 +146,9 @@
       paintHero(next);
       if (Math.abs(next - target) >= .001) requestUpdate();
       paintStory(clamp((y - measurements.story.top) / measurements.story.distance));
-    } else { syncRain(); }
+    }
     paintBlinds(clamp((y - measurements.blinds.top) / measurements.blinds.distance));
+    syncRain();
   }
   function requestUpdate() { if (!animationFrame) animationFrame = requestAnimationFrame(update); }
   sceneButtons.forEach(function (button, index) {
@@ -180,7 +190,7 @@
     rainFrame = requestAnimationFrame(rain);
   }
   function rainVisible() {
-    return context && window.Mob.themeConfig?.motion.rain !== false && !reduced.matches && desktop.matches && !document.hidden && heroProgress > .63 && measurements.hero && window.scrollY < measurements.hero.top + hero.offsetHeight;
+    return context && window.Mob.themeConfig?.motion.rain !== false && !reduced.matches && desktop.matches && !document.hidden && heroProgress > .63 && measurements.hero && window.scrollY < measurements.hero.end;
   }
   function syncRain() {
     if (rainVisible()) { if (!rainFrame) { lastRain = performance.now(); rainFrame = requestAnimationFrame(rain); } }
@@ -245,7 +255,7 @@
   const wishTimer = setInterval(function () {
     if (document.hidden || reduced.matches) return;
     const y = window.scrollY;
-    if (y + window.innerHeight < measurements.blinds.top || y > measurements.blinds.top + blinds.offsetHeight) return;
+    if (y + window.innerHeight < measurements.blinds.top || y > measurements.blinds.end) return;
     wishIndex = (wishIndex + 1) % wishes.length;
     wishNode.textContent = wishes[wishIndex];
     wishNode.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 450, easing: "ease-out" });
@@ -265,7 +275,7 @@
   desktop.addEventListener("change", measure);
   if ("ResizeObserver" in window) new ResizeObserver(measure).observe(document.body);
   window.addEventListener("pagehide", function (event) {
-    if (event.persisted) { if (rainFrame) cancelAnimationFrame(rainFrame); rainFrame = 0; return; }
+    if (event.persisted) { cancelAnimationFrame(animationFrame); animationFrame = 0; if (rainFrame) cancelAnimationFrame(rainFrame); rainFrame = 0; return; }
     cancelAnimationFrame(animationFrame); cancelAnimationFrame(rainFrame);
     clearTimeout(typingTimer); clearInterval(wishTimer);
   });
