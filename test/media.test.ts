@@ -36,6 +36,70 @@ async function uploadPng() {
   return { session, record, bytes };
 }
 
+describe('upload housekeeping', () => {
+  it('retains a retryable session and tombstone when part cleanup fails', async () => {
+    vi.useFakeTimers();
+    const { session, record } = await uploadPng();
+    const part = `.mob/uploads/${session.id}/parts/1.json`;
+    await bucket.put(part, JSON.stringify({ partNumber: 1, etag: 'test', size: 32 }));
+    vi.advanceTimersByTime(86_400_001);
+    const remove = bucket.delete.bind(bucket); let fail = true;
+    vi.spyOn(bucket, 'delete').mockImplementation(async keys => {
+      if (fail && (Array.isArray(keys) ? keys : [keys]).includes(part)) { fail = false; throw new Error('Transient part cleanup failure'); }
+      return remove(keys);
+    });
+    await expect(service.cleanupUploads()).rejects.toThrow('Transient');
+    expect(await bucket.head(`.mob/uploads/${session.id}/session.json`)).not.toBeNull();
+    expect(await bucket.head(`.mob/uploads/${session.id}/state.json`)).not.toBeNull();
+    expect(await service.cleanupUploads()).toMatchObject({ cleaned: 1 });
+    expect(await bucket.head(record.key)).not.toBeNull();
+  });
+  it('keeps completed bytes and metadata while retiring expired sessions, with bounded pagination', async () => {
+    vi.useFakeTimers();
+    const records = [];
+    for (let index = 0; index < 5; index++) records.push(await uploadPng());
+    expect(await service.cleanupUploads()).toMatchObject({ cleaned: 0, expired: 0 });
+    vi.advanceTimersByTime(86_400_001);
+    const first = await service.cleanupUploads();
+    expect(first.cleaned).toBe(4); expect(first.cursor).not.toBeNull();
+    expect(await service.cleanupUploads(first.cursor!)).toEqual({ cleaned: 1, expired: 0, cursor: null });
+    expect([...bucket.objects.keys()].filter(key => key.startsWith('.mob/uploads/'))).toHaveLength(0);
+    for (const { record, session } of records) {
+      expect(await service.getMedia(record.id)).toEqual(record);
+      expect(await bucket.head(record.key)).not.toBeNull();
+      await expect(service.getUpload(session.id, admin)).rejects.toMatchObject({ code: 'UPLOAD_NOT_FOUND' });
+    }
+  });
+  it('expires incomplete multipart sessions, aborts their parts and retains a one-day cancellation tombstone', async () => {
+    vi.useFakeTimers();
+    const session = await service.createUpload({ filename: 'video.mp4', contentType: 'video/mp4', size: PART_SIZE + 20 }, admin);
+    await service.uploadPart(session.id, 1, body(mp4(PART_SIZE)), admin);
+    vi.advanceTimersByTime(86_400_001);
+    expect(await service.cleanupUploads()).toEqual({ cleaned: 0, expired: 1, cursor: null });
+    expect(bucket.uploads.size).toBe(0);
+    await expect(service.completeUpload(session.id, admin)).rejects.toMatchObject({ code: 'UPLOAD_CLOSED' });
+    expect(await service.cleanupUploads()).toMatchObject({ cleaned: 0 });
+    vi.advanceTimersByTime(86_400_001);
+    expect(await service.cleanupUploads()).toEqual({ cleaned: 1, expired: 0, cursor: null });
+    expect([...bucket.objects.keys()].filter(key => key.startsWith('.mob/uploads/'))).toHaveLength(0);
+    expect(await bucket.head(session.key)).toBeNull();
+  });
+  it('preserves a completed object when its final metadata write failed', async () => {
+    vi.useFakeTimers();
+    const session = await service.createUpload({ filename: 'photo.png', contentType: 'image/png', size: 32 }, admin);
+    const put = bucket.put.bind(bucket);
+    const fail = vi.spyOn(bucket, 'put').mockImplementation(async (key, value, options) => {
+      if (key.startsWith('.mob/media/')) throw new Error('Transient metadata write failure');
+      return put(key, value, options);
+    });
+    await expect(service.uploadSingle(session.id, body(png()), admin)).rejects.toThrow('Transient');
+    fail.mockRestore(); vi.advanceTimersByTime(86_400_001);
+    expect(await service.cleanupUploads()).toMatchObject({ cleaned: 1 });
+    expect(await service.getMedia(session.id)).toMatchObject({ id: session.id, size: 32 });
+    expect(await bucket.head(session.key)).not.toBeNull();
+  });
+});
+
 describe('upload validation and ownership', () => {
   it('creates cryptographic IDs, canonical names and fixed URLs', async () => {
     const session = await service.createUpload({ filename: '旅行照片.JPEG', contentType: 'image/jpeg', size: 4 }, admin);

@@ -34,6 +34,7 @@ dist/client/             生成的静态文件，不提交 GitHub
 - [部署说明](docs/DEPLOYMENT.md)：GitHub / Cloudflare 的首次设置与后续部署。
 - [前端接入](docs/FRONTEND.md)：纯 HTML/CSS/JS 放哪里、登录、保存与上传示例。
 - [API](docs/API.md) / [OpenAPI](docs/openapi.yaml)：请求、响应、权限、错误和约束。
+- [媒体存储与清理](docs/MEDIA-STORAGE.md)：Git 与 R2 各自保存什么、辅助记录恢复、过期会话清理和对象删除。
 - [仓库活动](docs/ACTIVITY.md)：共用 GitHub 提交热力图的配置、时区、统计口径与失败状态。
 
 ## 开发与验证

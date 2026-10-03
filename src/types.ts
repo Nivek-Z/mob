@@ -31,7 +31,7 @@ export interface SavePostInput {
 export interface PostMutation { post: Post; commitSha: string; }
 export interface MediaRecord {
   id: string; key: string; filename: string; contentType: string;
-  size: number; owner: string; createdAt: string; url: string;
+  size: number; owner?: string; createdAt: string; url: string;
 }
 export interface UploadSession {
   id: string; key: string; filename: string; contentType: string; size: number;

@@ -70,10 +70,13 @@ export class GalleryService {
     const input = object(value); if (input.sha !== null && !validSha(input.sha) || Object.keys(input).some(key => key !== 'sha')) throw new ApiError(400, 'INVALID_INPUT', 'Supply the current gallery SHA.');
     const document = await this.document();
     if (document.sha !== input.sha) throw new ApiError(409, 'CONFIG_CONFLICT', 'The gallery changed. Reload before deleting.');
-    // Revoke the display/public grant first. A failed R2 deletion leaves a private,
-    // recoverable object in the unregistered list, rather than lost metadata.
+    // Resolve before unregistering: Git may be the only remaining metadata source.
+    const record = await this.media.getMedia(id);
+    // Keep a retryable private record if storage deletion fails after the Git commit.
+    if (record) await this.media.preserveMedia(record);
+    // Revoke the display/public grant first; failed storage deletion can be retried.
     const result = document.items.some(item => item.id === id) ? await this.save(document.items.filter(item => item.id !== id), document.sha) : { sha: document.sha };
-    await this.media.deleteMedia(id); return { ...result, deleted: true };
+    await this.media.deleteMedia(id, record); return { ...result, deleted: true };
   }
   async import(cursor?: string) {
     const page = await this.media.listMedia(cursor); const document = await this.document();

@@ -19,9 +19,25 @@
       if (!Object.values(types).includes(contentType)) throw new Error('支持 JPEG、PNG、GIF、WebP、AVIF、MP4、WebM、MP3、WAV、OGG 和 M4A。');
       const progress = onProgress || (() => {});
       if (!session) session = await window.Mob.api('/api/admin/uploads', { method: 'POST', json: { filename: name, contentType, size: file.size } });
-      const base = '/api/admin/uploads/' + session.id;
+      let base = '/api/admin/uploads/' + session.id;
       if (!record) {
-        const state = await window.Mob.api(base);
+        let state;
+        try { state = await window.Mob.api(base); }
+        catch (error) {
+          if (!['UPLOAD_EXPIRED', 'UPLOAD_NOT_FOUND'].includes(error.code)) throw error;
+          // Session cleanup must not cause a second copy of an already completed file.
+          try {
+            const saved = await window.Mob.api('/api/admin/gallery/items', { method: 'POST', json: { id: session.id, source } });
+            const item = saved.item;
+            record = { id: item.id, key: 'media/' + item.id + '/' + item.filename, filename: item.filename,
+              contentType: item.contentType, size: item.size, createdAt: item.createdAt, url: item.url };
+          } catch (recoveryError) {
+            if (recoveryError.code !== 'MEDIA_NOT_READY') throw recoveryError;
+            session = await window.Mob.api('/api/admin/uploads', { method: 'POST', json: { filename: name, contentType, size: file.size } });
+            completed.clear(); base = '/api/admin/uploads/' + session.id;
+          }
+          state = { status: record ? 'completed' : 'active', record };
+        }
         if (state.status === 'completed' || state.record) record = state.record;
         if (!record && session.mode === 'single') record = await binary(base + '/body', file, loaded => progress(Math.round(loaded / file.size * 95), '上传到 R2'));
         else if (!record) {

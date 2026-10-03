@@ -4,13 +4,14 @@ import { GitHubClient, validSha } from './github';
 import { registry, manifest, themePath } from './themes';
 import { siteOrigin } from './config';
 import { MediaService } from './media';
+import { GALLERY_INDEX_PATH } from './media-metadata';
 import type { Env } from './types';
 import { activityConfig } from './activity-config';
 
 export const SITE_PATH = 'config/site/settings.json';
 export const THEMES_PATH = 'frontend/themes.json';
 export const CATEGORIES_PATH = 'config/gallery/categories.json';
-export const GALLERY_PATH = 'content/gallery/items.json';
+export const GALLERY_PATH = GALLERY_INDEX_PATH;
 const PUBLIC_REFERENCES_KEY = '.mob/settings/public-references.json';
 const MAX_REFERENCE_CACHE_BYTES = 2 * 1024 * 1024;
 const COMMON_REFERENCE_PATHS = new Set([SITE_PATH, CATEGORIES_PATH, THEMES_PATH].flatMap(path => [path, path.replace(/\.json$/, '.references.json')]));
@@ -37,7 +38,7 @@ export function references(value: unknown, env: Env, explicit: string[] = []): {
     if (depth > 40) throw new ApiError(422, 'CONFIG_TOO_DEEP', 'JSON nesting is limited to 40 levels.');
     if (typeof value === 'string') {
       if (/\/api\/admin\/media\/[^/]+\/file/.test(value)) throw new ApiError(422, 'PRIVATE_PREVIEW_LINK', 'Save stable media URLs, not management preview URLs.');
-      for (const link of value.match(/https?:\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g) ?? []) {
+      for (const link of value.match(/(?:https?:)?\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g) ?? []) {
         let url: URL; try { url = new URL(link, origin); } catch { continue; }
         if (url.origin !== origin || !url.pathname.startsWith('/media/')) continue;
         const match = /^\/media\/([^/]+)\/([^/]+)$/.exec(url.pathname);
@@ -97,7 +98,11 @@ export class SettingsService {
   async edit(path: string, fallback: unknown = {}) {
     const result = await this.read(path, fallback);
     const sidecar = await this.read(path.replace(/\.json$/, '.references.json'), { mediaIds: [] });
-    return { ...result, mediaIds: object(sidecar.value).mediaIds as string[] ?? [] };
+    const detected = new Set(references(result.value, this.env).ids);
+    const stored = references({}, this.env, object(sidecar.value).mediaIds as string[] ?? []).ids;
+    // The editor submits additional references only. Automatically detected URLs
+    // must not become permanent grants when the corresponding field is removed.
+    return { ...result, mediaIds: stored.filter(id => !detected.has(id)) };
   }
   async themes() {
     const file = await this.read(THEMES_PATH); return { ...file, value: registry(file.value) };

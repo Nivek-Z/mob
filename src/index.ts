@@ -49,7 +49,7 @@ function managedMedia(input: SavePostInput, env: Env): { ids: string[]; filename
   if (/\/api\/admin\/media\/[0-9a-f-]+\/file/.test(text)) throw new ApiError(422, 'PRIVATE_PREVIEW_LINK', 'Use the stable media URL in article content, not the private preview URL.');
   const ids = new Set(input.mediaIds ?? []);
   const filenames = new Map<string, Set<string>>();
-  const links = text.match(/https?:\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g) ?? [];
+  const links = text.match(/(?:https?:)?\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g) ?? [];
   for (const link of links) {
     let url: URL;
     try { url = new URL(link, origin); } catch { continue; }
@@ -78,6 +78,7 @@ async function verifyMedia(references: ReturnType<typeof managedMedia>, media: M
 function needsCoordinator(path: string, verb: string): boolean {
   return /^\/api\/admin\/posts\/[^/]+$/.test(path) && ['PUT', 'DELETE'].includes(verb)
     || /^\/api\/admin\/media\/[^/]+$/.test(path) && verb === 'DELETE'
+    || path === '/api/admin/uploads/cleanup' && verb === 'POST'
     || /^\/api\/admin\/(settings|themes|gallery)(\/|$)/.test(path) && !readMethods.includes(verb);
 }
 function decorate(response: Response, requestId: string, privateResponse: boolean): Response {
@@ -222,6 +223,12 @@ export function createApp(overrides: Partial<AppServices> = {}, options: { coord
         if (path === '/api/admin/uploads') {
           method(request, ['POST']);
           return decorate(json(await media.createUpload(object(await readJson(request)) as unknown as { filename: string; contentType: string; size: number }, identity!), 201), requestId, true);
+        }
+        if (path === '/api/admin/uploads/cleanup') {
+          method(request, ['POST']);
+          const input = object(await readJson(request));
+          if (Object.keys(input).some(key => key !== 'cursor')) throw new ApiError(400, 'INVALID_INPUT', 'Supply only an optional cleanup cursor.');
+          return decorate(json(await media.cleanupUploads(input.cursor as string | undefined)), requestId, true);
         }
         match = /^\/api\/admin\/uploads\/([^/]+)$/.exec(path);
         if (match) {

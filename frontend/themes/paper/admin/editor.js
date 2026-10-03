@@ -16,48 +16,55 @@
     markdown: document.getElementById("markdown")
   };
   let currentSha = null;
-  let mediaIds = [];
   let editing = "";
   let uploading = 0;
   let saving = false;
+  let loading = true;
+  let deleting = false;
   let dirty = false;
+  let revision = 0;
   const escapeHtml = window.Mob.escapeHtml;
-  const types = {
-    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
-    webp: "image/webp", avif: "image/avif", mp4: "video/mp4", webm: "video/webm"
-  };
 
   function say(message, isError) {
     note.textContent = message || "";
     note.className = isError ? "note error" : "note";
   }
   function renderPreview() {
-    const text = fields.markdown.value.replace(/https?:\/\/[^)\s]+\/media\/([0-9a-f-]{36})\/[^)\s]+/gi, "/api/admin/media/$1/file");
+    const text = fields.markdown.value.replace(/(?:https?:)?\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g, value => {
+      const id = managedId(value); return id ? '/api/admin/media/' + id + '/file' : value;
+    });
     preview.innerHTML = window.Mob.renderMarkdown(text);
     const cover = fields.cover.value.trim();
-    const previewCover = window.Mob.safeUrl(cover.indexOf("/media/") >= 0 ? cover.replace(/https?:\/\/[^/]+\/media\/([0-9a-f-]{36})\/[^?\s]+/i, "/api/admin/media/$1/file") : cover);
+    const id = managedId(cover);
+    const previewCover = window.Mob.safeUrl(id ? '/api/admin/media/' + id + '/file' : cover);
     if (previewCover) {
       const image = document.createElement("img"); image.className = "cover"; image.alt = "封面预览"; image.src = previewCover;
       preview.prepend(image);
     }
   }
   function syncActions() {
-    form.querySelectorAll(".actions button").forEach(function (button) { button.disabled = saving || uploading > 0; });
-    file.disabled = saving || uploading > 0;
+    form.inert = loading || deleting;
+    form.querySelectorAll(".actions button").forEach(function (button) { button.disabled = loading || deleting || saving || uploading > 0; });
+    Object.values(fields).forEach(function (field) { field.disabled = loading || deleting; });
+    fields.slug.readOnly = Boolean(editing) || saving;
+    file.disabled = loading || deleting || saving || uploading > 0;
   }
   function collectIds() {
-    const found = (fields.markdown.value + "\n" + fields.cover.value).match(/\/media\/([0-9a-f-]{36})\//gi) || [];
+    const found = (fields.markdown.value + "\n" + fields.cover.value).match(/(?:https?:)?\/\/[^\s<>"')\]]+|\/media\/[^\s<>"')\]]+/g) || [];
     const ids = [];
     found.forEach(function (item) {
-      const id = item.split("/")[2];
-      if (ids.indexOf(id) < 0) ids.push(id);
+      const id = managedId(item);
+      if (id && ids.indexOf(id) < 0) ids.push(id);
     });
-    return ids.slice(0, 200);
+    return ids;
+  }
+  function managedId(value) {
+    try { const url = new URL(value, location.origin); return url.origin === location.origin ? /^\/media\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/[^/]+$/.exec(url.pathname)?.[1] || null : null; }
+    catch { return null; }
   }
   function fill(post) {
     editing = post ? post.slug : "";
     currentSha = post ? post.sha : null;
-    mediaIds = post ? (post.mediaIds || []).slice() : [];
     fields.title.value = post ? post.title : "";
     fields.slug.value = post ? post.slug : "";
     fields.slug.readOnly = Boolean(post);
@@ -65,6 +72,7 @@
     fields.tags.value = post ? (post.tags || []).join(", ") : "";
     fields.cover.value = post ? post.cover || "" : "";
     fields.markdown.value = post ? post.markdown || "" : "";
+    dirty = false; revision++;
     document.getElementById("mode").textContent = post ? (post.status === "published" ? "已发布" : "草稿") : "新建";
     remove.hidden = !post;
     renderPreview();
@@ -83,12 +91,15 @@
     fill(await window.Mob.api("/api/admin/posts/" + encodeURIComponent(slug)));
   }
   function enqueue(files) {
+    if (loading || deleting || saving) return;
     files.forEach(function (blob) {
       const row = document.createElement('div'); row.className = 'upload-row';
       const label = document.createElement('span'); const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重试'; retry.hidden = true;
       row.append(label, retry); document.getElementById('upload-queue').append(row);
       const run = window.Mob.uploadTask(blob, 'editor', function (percent, stage) { label.textContent = blob.name + ' · ' + stage + ' ' + percent + '%'; });
+      let running = false;
       async function attempt() {
+        if (running || loading || deleting || saving) return; running = true;
         retry.hidden = true; uploading++; syncActions();
         try {
           const record = await run();
@@ -96,9 +107,9 @@
           const box = fields.markdown; const at = box.selectionStart;
           box.setRangeText(markdown, at, box.selectionEnd, 'end');
           if (!fields.cover.value && record.contentType.startsWith('image/')) fields.cover.value = record.url;
-          renderPreview(); dirty = true; label.textContent = record.filename + ' · 已插入文章插图';
+          renderPreview(); dirty = true; revision++; label.textContent = record.filename + ' · 已插入文章插图';
         } catch (error) { label.textContent = blob.name + ' · ' + error.message; retry.hidden = false; }
-        finally { uploading--; syncActions(); }
+        finally { running = false; uploading--; syncActions(); }
       }
       retry.addEventListener('click', attempt); attempt();
     });
@@ -110,11 +121,12 @@
   file.addEventListener('change', function () { enqueue(Array.from(file.files || [])); file.value = ''; });
   form.addEventListener("submit", function (event) {
     event.preventDefault();
-    if (uploading || saving) { say("请等待当前上传或保存完成。"); return; }
+    if (loading || deleting || uploading || saving) { say("请等待当前操作完成。"); return; }
     const status = event.submitter && event.submitter.dataset.status || "draft";
     const slug = fields.slug.value.trim();
     const tags = fields.tags.value.split(/[,，]/).map(function (item) { return item.trim(); }).filter(Boolean);
     say("正在保存…");
+    const submittedRevision = revision;
     saving = true; syncActions();
     window.Mob.api("/api/admin/posts/" + encodeURIComponent(slug), {
       method: "PUT",
@@ -129,13 +141,14 @@
         mediaIds: collectIds()
       }
     }).then(function (result) {
-      dirty = false;
+      dirty = revision !== submittedRevision;
       currentSha = result.post.sha;
       editing = result.post.slug;
+      fields.slug.value = result.post.slug;
       fields.slug.readOnly = true;
       remove.hidden = false;
       document.getElementById("mode").textContent = result.post.status === "published" ? "已发布" : "草稿";
-      say(status === "published" ? "已发布。" : "草稿已保存。");
+      say(dirty ? "已保存提交时的内容。后续修改尚未保存。" : status === "published" ? "已发布。" : "草稿已保存。");
       history.replaceState(null, "", "/admin/?slug=" + encodeURIComponent(result.post.slug));
       return loadList();
     }).catch(function (error) {
@@ -143,22 +156,25 @@
     }).finally(function () { saving = false; syncActions(); });
   });
   remove.addEventListener("click", function () {
-    if (!editing || !confirm("删除这篇文章？图片不会一起删除。")) return;
+    if (loading || deleting || saving || uploading || !editing || !confirm("删除这篇文章及页面上的未保存修改？媒体对象会保留。")) return;
+    deleting = true; syncActions();
     window.Mob.api("/api/admin/posts/" + encodeURIComponent(editing), {
       method: "DELETE",
       json: { sha: currentSha }
     }).then(function () {
+      dirty = false; deleting = false;
       location.href = "/admin/?new=1";
-    }).catch(function (error) { say(error.message, true); });
+    }).catch(function (error) { say(error.message, true); }).finally(function () { deleting = false; syncActions(); });
   });
 
-  form.addEventListener('input', () => { dirty = true; });
-  window.addEventListener('beforeunload', event => { if (dirty || uploading) { event.preventDefault(); event.returnValue = ''; } });
+  form.addEventListener('input', () => { dirty = true; revision++; });
+  window.addEventListener('beforeunload', event => { if (dirty || uploading || saving || deleting) { event.preventDefault(); event.returnValue = ''; } });
+  syncActions();
   window.Mob.api("/api/admin/session").then(function (session) {
     who.textContent = session.email;
     return loadList().then(openRequested);
   }).catch(function (error) {
     who.textContent = error.message || "还没有登录。";
     form.hidden = true;
-  });
+  }).finally(function () { loading = false; syncActions(); });
 })();

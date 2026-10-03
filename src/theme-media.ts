@@ -26,6 +26,10 @@ export async function themeMedia(request: Request, env: Env, themeId: string, fi
   }
   if (!stored) throw new ApiError(503, 'MEDIA_STORAGE_ERROR', 'The theme media could not be stored.');
   const headers = new Headers({ 'Content-Type': asset.contentType, 'Cache-Control': 'public, max-age=3600', 'ETag': stored.httpEtag, 'Content-Length': String(stored.size) });
-  if (request.headers.get('If-None-Match') === stored.httpEtag) return new Response(null, { status: 304, headers });
-  return new Response(request.method === 'HEAD' ? null : stored.body, { headers });
+  if (request.headers.get('If-None-Match') === stored.httpEtag) {
+    await stored.body.cancel();
+    return new Response(null, { status: 304, headers });
+  }
+  if (request.method === 'HEAD') { await stored.body.cancel(); return new Response(null, { headers }); }
+  return new Response(stored.body, { headers });
 }

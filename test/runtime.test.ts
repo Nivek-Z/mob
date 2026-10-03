@@ -161,6 +161,102 @@ beforeEach(() => {
 afterAll(async () => { await mf?.dispose(); }, 30000);
 
 describe('Cloudflare runtime integration', () => {
+  it('releases unused native R2 streams for theme-seed HEAD and conditional responses', async () => {
+    const first = await request('/theme-media/firefly/hero.avif'); expect(first.status).toBe(200);
+    const head = await request('/theme-media/firefly/hero.avif', 'HEAD'); expect(head.status).toBe(200);
+    expect((await head.arrayBuffer()).byteLength).toBe(0);
+    const unchanged = await request('/theme-media/firefly/hero.avif', 'GET', undefined, false, { 'If-None-Match': first.headers.get('ETag')! });
+    expect(unchanged.status).toBe(304); expect((await unchanged.arrayBuffer()).byteLength).toBe(0);
+  });
+  it('recovers adopted managed files whose original R2 MIME was generic', async () => {
+    const id = '12345678-1234-4234-8234-123456789abc', key = 'media/' + id + '/old.png';
+    const bucket = await mf.getR2Bucket('MEDIA');
+    const bytes = Uint8Array.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,6,0,0,0,0,0,0]);
+    const original = await bucket.put(key, bytes, { httpMetadata: { contentType: 'application/octet-stream' } });
+    expect((await request('/api/admin/gallery/storage/import', 'POST', { key, etag: original!.etag }, true)).status).toBe(200);
+    await bucket.delete('.mob/media/' + id + '.json');
+    const response = await request('/api/admin/media/' + id + '/file', 'GET', undefined, true);
+    expect(response.status).toBe(200); expect(response.headers.get('Content-Type')).toBe('image/png');
+  });
+  it('recovers registered media from Git after all auxiliary R2 records are cleared, without writes on reads', async () => {
+    const record = await uploadFixture();
+    const registered = (await data(await request('/api/admin/gallery/items', 'POST', { id: record.id }, true))).data;
+    expect((await request('/api/admin/gallery', 'PATCH', { sha: registered.sha, items: [{ id: record.id, isPublic: true }] }, true)).status).toBe(200);
+    const bucket = await mf.getR2Bucket('MEDIA');
+    const auxiliary = await bucket.list({ prefix: '.mob/', limit: 1000 });
+    await bucket.delete(auxiliary.objects.map(object => object.key));
+    expect((await request(new URL(record.url).pathname)).status).toBe(200);
+    expect((await request('/api/admin/media/' + record.id + '/file', 'GET', undefined, true)).status).toBe(200);
+    expect(await bucket.head('.mob/media/' + record.id + '.json')).toBeNull();
+    const gallery = (await data(await request('/api/admin/gallery', 'GET', undefined, true))).data;
+    expect((await request('/api/admin/gallery/items/' + record.id, 'DELETE', { sha: gallery.sha }, true)).status).toBe(200);
+    expect(await bucket.head(record.key)).toBeNull();
+    expect((await request(new URL(record.url).pathname)).status).toBe(404);
+  });
+  it('cleans expired upload sessions through an authenticated coordinator and retains completed media', async () => {
+    const record = await uploadFixture(), bucket = await mf.getR2Bucket('MEDIA');
+    const key = '.mob/uploads/' + record.id + '/session.json';
+    const session = await (await bucket.get(key))!.json() as any;
+    session.expiresAt = new Date(Date.now() - 1000).toISOString();
+    await bucket.put(key, JSON.stringify(session));
+    expect((await request('/api/admin/uploads/cleanup', 'POST', {})).status).toBe(401);
+    expect((await request('/api/admin/uploads/cleanup', 'POST', {}, true, { Origin: 'https://other.example.com' })).status).toBe(403);
+    let cursor: string | null = null;
+    do {
+      const response = await request('/api/admin/uploads/cleanup', 'POST', cursor ? { cursor } : {}, true);
+      expect(response.status).toBe(200); cursor = (await data(response)).data.cursor;
+    } while (cursor);
+    expect(await bucket.head(key)).toBeNull(); expect(await bucket.head(record.key)).not.toBeNull();
+    expect((await request('/api/admin/media/' + record.id + '/file', 'GET', undefined, true)).status).toBe(200);
+  });
+  it('deletes an imported legacy object through the real gallery endpoint', async () => {
+    const bucket = await mf.getR2Bucket('MEDIA');
+    const key = 'legacy/review-delete.png';
+    const bytes = Uint8Array.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,6,0,0,0,0,0,0]);
+    const original = await bucket.put(key, bytes, { httpMetadata: { contentType: 'image/png' } });
+    const importedResponse = await request('/api/admin/gallery/storage/import', 'POST', { key, etag: original!.etag }, true);
+    expect(importedResponse.status).toBe(200);
+    const imported = (await data(importedResponse)).data;
+    const deletion = await request('/api/admin/gallery/items/' + imported.item.id, 'DELETE', { sha: imported.sha }, true);
+    const error = await data(deletion);
+    expect(JSON.parse(files.get('content/gallery/items.json')!.content).items.some((item: any) => item.id === imported.item.id)).toBe(false);
+    expect(await bucket.head('media/' + imported.item.id + '/' + imported.item.filename)).toBeNull();
+    expect(await bucket.head(key)).not.toBeNull();
+    expect({ status: deletion.status, error: error.error }).toEqual({ status: 200, error: undefined });
+  });
+  it('Paper removes automatic public media grants when the avatar is cleared', async () => {
+    const record = await uploadFixture();
+    const site = (await data(await request('/api/admin/settings/site', 'GET', undefined, true))).data;
+    site.value.profile.avatar = record.url;
+    const saved = await request('/api/admin/settings/site', 'PUT', { sha: site.sha, value: site.value }, true);
+    expect(saved.status).toBe(200);
+    expect((await request(new URL(record.url).pathname)).status).toBe(200);
+    const { JSDOM } = await import('jsdom');
+    const dom = new JSDOM(readFileSync('frontend/themes/paper/admin/settings.html', 'utf8'), { url: origin + '/admin/settings.html', runScripts: 'outside-only' });
+    const win = dom.window as any;
+    win.document.getElementById('paper-doc').value = 'site';
+    let initialized!: () => void;
+    const loaded = new Promise<void>(resolve => { initialized = resolve; });
+    let finished!: () => void;
+    const submitted = new Promise<void>(resolve => { finished = resolve; });
+    win.Mob = { api: async (path: string, options?: any) => {
+      const response = await request(path, options?.method ?? 'GET', options?.json, true);
+      const payload = await data(response);
+      expect(response.status).toBe(200);
+      queueMicrotask(options ? finished : initialized);
+      return payload.data;
+    } };
+    win.eval(readFileSync('frontend/themes/paper/admin/settings.js', 'utf8'));
+    await loaded; await new Promise(resolve => setTimeout(resolve, 0));
+    const raw = win.document.getElementById('paper-json');
+    const updated = JSON.parse(raw.value); updated.profile.avatar = '';
+    raw.value = JSON.stringify(updated); raw.dispatchEvent(new win.Event('input', { bubbles: true }));
+    win.document.getElementById('paper-save').click();
+    await submitted; await new Promise(resolve => setTimeout(resolve, 0));
+    dom.window.close();
+    expect(JSON.parse(files.get('config/site/settings.json')!.content).profile.avatar).toBe('');
+    expect((await request(new URL(record.url).pathname)).status).toBe(404);
+  });
   it('aggregates activity through native fetch/R2, labels stale results and respects live disabling', async () => {
     const bucket = await mf.getR2Bucket('MEDIA');
     const cached = await bucket.list({ prefix: 'cache/github-activity/' }); await bucket.delete(cached.objects.map(object => object.key));

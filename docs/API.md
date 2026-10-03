@@ -123,11 +123,12 @@ createdAt/updatedAt/publishedAt 使用 ISO 8601 UTC 字符串，publishedAt 可�
 | PUT | `/api/admin/uploads/:id/body` | 原始文件字节；MediaRecord；只适用 single |
 | PUT | `/api/admin/uploads/:id/parts/:number` | 原始分片字节；`{partNumber,etag}`；只适用 multipart |
 | POST | `/api/admin/uploads/:id/complete` | JSON `{}`；MediaRecord；服务器自行收集 ETag |
+| POST | `/api/admin/uploads/cleanup` | JSON `{cursor?}`；清理过期上传状态，返回 `{cleaned,expired,cursor}` |
 | GET | `/api/admin/media?cursor=...` | `{items:MediaRecord[],cursor:string|null}` |
 | DELETE | `/api/admin/media/:id` | 无请求体；`{deleted:true}` |
 | GET / HEAD | `/api/admin/media/:id/file` | 私有文件预览，可用于未发布文章 |
 
-上传 body 是 Blob/ArrayBuffer，不是 FormData 或 Base64 JSON。支持 JPEG、PNG、GIF、WebP、AVIF、MP4、WebM，对应 Content-Type：image/jpeg、image/png、image/gif、image/webp、image/avif、video/mp4、video/webm。扩展名应与类型匹配；无扩展时自动添加，文件名会规范为 ASCII。文件头有基础检查。
+上传 body 是 Blob/ArrayBuffer，不是 FormData 或 Base64 JSON。支持 JPEG、PNG、GIF、WebP、AVIF、MP4、WebM、MP3、WAV、Ogg/Opus、M4A，对应 Content-Type：image/jpeg、image/png、image/gif、image/webp、image/avif、video/mp4、video/webm、audio/mpeg、audio/wav、audio/ogg、audio/mp4。扩展名应与类型匹配；无扩展时自动添加，文件名会规范为 ASCII。文件头检查有界，不执行完整解码或转码。
 
 默认最大文件 1 GiB，由 MAX_MEDIA_BYTES 配置；本实现上限 5 GiB。上传会话 24 小时过期，过期需重新创建。所有文件都经 Worker 分片写入 R2，没有浏览器可用的 R2 长期密钥。
 
@@ -165,7 +166,11 @@ MediaRecord：
 id, key, filename, contentType, size, owner, createdAt, url
 ```
 
-url 是写进正文的稳定 URL。key/owner 仅供后台元数据使用。列表每页最多 25 条，cursor 是不透明游标，下一次传回即可；null 表示结束，不代表有精确总条数。
+url 是写进正文的稳定 URL。key/owner 仅供后台元数据使用；从 Git 恢复的记录可能没有 owner。旧媒体列表仅扫描 `.mob/media/`，每页最多 25 条；它不是完整图库，已登记项目应读取 `/api/admin/gallery`。cursor 是不透明游标，下一次传回即可；null 表示结束。
+
+已登记素材的 ID、文件名、MIME、大小、创建时间和 URL 保存在 Git 图库。`.mob/media/` 记录缺失时，读取与删除会从 Git 恢复元数据，并核对 R2 对象的大小与已有 MIME；读取不写回记录，不改变公开授权。R2 文件本身缺失时仍返回 404。数据归属和清理规则见 [MEDIA-STORAGE.md](MEDIA-STORAGE.md)。
+
+清理每次扫描最多四个上传目录，应一直传回 cursor 直到 null。已完成/已删除会话在原 24 小时有效期结束后移除辅助记录；取消状态至少保留取消后一天。过期未完成会话先取消，其状态再保留一天，防止迟到请求重新完成。`expired` 是本次取消数，`cleaned` 是本次移除辅助目录数。清理不会删除已完成的媒体文件、媒体记录或 Git 图库条目；也不提供定时任务。清理后旧会话 GET 返回 UPLOAD_NOT_FOUND，已完成文件仍通过媒体 ID 访问。
 
 任何文章（含草稿）仍引用媒体时，DELETE 返回 409 MEDIA_IN_USE，details.articles 列出文章 slug。先编辑文章解除引用再删除。取消上传不适用于已完成媒体，应调用媒体删除接口。
 
@@ -209,6 +214,8 @@ GraphQL 读取按文章数量和源文件字节数共同分批，给 JSON 转义
 
 PUT 请求仅接受 `{sha,value,mediaIds?}`；新文件 sha=null，已存在文件使用其当前 blob SHA。配置与 `<name>.references.json` 同 commit 保存。JSON 最多 512 KiB，嵌套最多 40 层，引用最多 200 个对象。`CONFIG_CONFLICT` 表示仓库或目标文件已变化；保留输入并重新加载合并。可选主题 JSON Schema 在 Workers 内校验，仅支持本地片段 `$ref`，不执行主题代码。
 
+配置 GET 的 `mediaIds` 仅返回无法从当前配置中的本站媒体 URL 自动识别的额外引用。PUT 传回这些额外引用即可；后端会重新检测 URL，并把合并后的引用写入侧文件。删除头像等 URL 时，不要把旧的自动引用当作额外 ID 再提交，否则它仍是有效授权。
+
 共用站点对象要求 `title/description/profile:{name,bio,avatar}/socials/friends`；链接项为 `{label,url}`，社交与友链允许 HTTP(S)、mailto。可选 navigation 数组包含 `{label,url}`，允许站内相对路径或 HTTP(S)。不接受用户名/密码 URL。更多非秘密字段可由核心扩展，不允许复制成主题专属社交/友链。
 
 可选 activity 配置控制所有主题的 GitHub 仓库热力图；只统计绑定仓库与分支，不统计个人全站贡献。显示区间、时区、五项统计与 ok/stale/unavailable/disabled 状态的定义见 [ACTIVITY.md](ACTIVITY.md)。读取失败不能伪装零活动，不返回提交消息、作者或凭据。
@@ -235,7 +242,7 @@ source 为 editor/gallery/theme/import，默认为 gallery；editor 默认归入
 
 分类 ID唯一；保留 `article-images`、`gallery` 两个默认 ID，可自由改显示名称。移除仍有项目的分类返回 `CATEGORY_IN_USE`。直接用旧 media DELETE 删除已登记项目返回 `GALLERY_MANAGED`，应使用图库删除接口。
 
-图库登记失败可重试同一 ID。删除先撤销文本公开记录，再删除 R2；后者失败可从已有媒体导入继续处理。被文章（含草稿）或任何配置（含停用主题）引用时返回 `MEDIA_IN_USE`，details 给出 articles/configs。
+图库登记失败可重试同一 ID。删除先保留可供重试的媒体记录、撤销 Git 图库记录，再删除 R2 管理对象；R2 删除失败时返回错误，可以携带当前图库 SHA 重试同一删除接口，也可从已有媒体导入继续处理。theme/legacy 的原始文件与链接保留。被文章（含草稿）或任何配置（含停用主题）引用时返回 `MEDIA_IN_USE`，details 给出 articles/configs。
 
 R2 有字节不代表已经进入 GitHub 图床索引。storage 扫描只读，不自动登记或公开；排除 `.mob/`、`cache/`、进行中的上传与不支持的类型。某页 items 为空但 cursor 非空时应继续扫描。候选包含 key/etag/id/filename/contentType/size/createdAt/kind，kind 为 managed/theme/legacy。managed 保留原 ID；theme/legacy 创建有独立 ID 的受管理副本，保留原对象和链接。纳入时校验文件头及 ETag，对象变化返回 STORAGE_CONFLICT；默认私有不展示。复制完成而登记失败可重试，不重复复制。此接口仅管理员可用。
 

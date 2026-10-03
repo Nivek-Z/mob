@@ -24,6 +24,20 @@ async function store(key: string, bytes = png(), contentType?: string) {
   return (await bucket.put(key, bytes, { httpMetadata: { contentType } }))!;
 }
 describe('R2 discovery and gallery adoption', () => {
+  it('retries storage deletion after the Git gallery grant has already been revoked', async () => {
+    const original = await store('legacy/delete-retry.png', png(), 'image/png');
+    const imported = await gallery.importStorage({ key: original.key, etag: original.etag }, admin);
+    const record = (await media.getMedia(imported.item.id))!;
+    const remove = bucket.delete.bind(bucket); let failed = false;
+    vi.spyOn(bucket, 'delete').mockImplementation(async keys => {
+      if (!failed && (Array.isArray(keys) ? keys : [keys]).includes(record.key)) { failed = true; throw new Error('Transient deletion failure'); }
+      return remove(keys);
+    });
+    await expect(gallery.remove(record.id, { sha })).rejects.toThrow('Transient');
+    expect(items).toHaveLength(0); expect(await media.getMedia(record.id)).toEqual(record);
+    await gallery.remove(record.id, { sha });
+    expect(await bucket.head(record.key)).toBeNull(); expect(await bucket.head(original.key)).not.toBeNull();
+  });
   it('discovers legacy/theme images, infers MIME and excludes internal or unsupported objects', async () => {
     for (const key of ['.mob/private.png', 'cache/aggregate.png', 'legacy/file.svg', 'legacy/file.html', 'empty.png']) await store(key, key === 'empty.png' ? new Uint8Array() : png());
     await store('theme-media/firefly/digest/hero.png', png(), 'image/png');
