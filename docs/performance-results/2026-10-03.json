@@ -1,0 +1,608 @@
+{
+  "site": "https://blog2.nivekz.org",
+  "date": "2026-10-03",
+  "beforeRevision": "a552ac692dbd59025f510aa470dd59b482e9c4f8",
+  "afterRevision": "9f6ec6eb6f64086fa396fb990dbd2063a63da64f",
+  "warmupRounds": 2,
+  "measuredRounds": 5,
+  "http": [
+    {
+      "path": "/",
+      "beforeTtfbMedianMs": 52.129000000000005,
+      "afterTtfbMedianMs": 49.228,
+      "ttfbReductionPercent": 5.565040572426103,
+      "beforeSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 51.192,
+          "totalMs": 95.46499999999999,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 57.961,
+          "totalMs": 61.743,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 58.507999999999996,
+          "totalMs": 100.002,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 52.129000000000005,
+          "totalMs": 93.44800000000001,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 50.49,
+          "totalMs": 91.891,
+          "wireBytes": 5160,
+          "newConnections": 0
+        }
+      ],
+      "afterSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 45.879999999999995,
+          "totalMs": 87.91499999999999,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 49.228,
+          "totalMs": 91.194,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 51.256,
+          "totalMs": 98.341,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 51.61000000000001,
+          "totalMs": 95.82400000000001,
+          "wireBytes": 5160,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 42.651,
+          "totalMs": 83.922,
+          "wireBytes": 5160,
+          "newConnections": 0
+        }
+      ]
+    },
+    {
+      "path": "/api/themes/firefly/config/appearance",
+      "beforeTtfbMedianMs": 418.902,
+      "afterTtfbMedianMs": 423.29200000000003,
+      "ttfbReductionPercent": -1.0479778086521534,
+      "beforeSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 418.902,
+          "totalMs": 456.129,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 427.587,
+          "totalMs": 470.27000000000004,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 422.02299999999997,
+          "totalMs": 463.822,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 370.999,
+          "totalMs": 415.824,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 330.421,
+          "totalMs": 371.809,
+          "wireBytes": 1523,
+          "newConnections": 0
+        }
+      ],
+      "afterSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 417.161,
+          "totalMs": 459.858,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 541.646,
+          "totalMs": 583.744,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 421.314,
+          "totalMs": 461.642,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 427.71700000000004,
+          "totalMs": 471.648,
+          "wireBytes": 1523,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 423.29200000000003,
+          "totalMs": 463.95599999999996,
+          "wireBytes": 1523,
+          "newConnections": 0
+        }
+      ]
+    },
+    {
+      "path": "/api/posts",
+      "beforeTtfbMedianMs": 242.839,
+      "afterTtfbMedianMs": 247.072,
+      "ttfbReductionPercent": -1.7431302220812985,
+      "beforeSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 242.839,
+          "totalMs": 287.22700000000003,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 284.094,
+          "totalMs": 328.075,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 257.19,
+          "totalMs": 300.076,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 229.759,
+          "totalMs": 274.822,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 219.87400000000002,
+          "totalMs": 263.85900000000004,
+          "wireBytes": 169,
+          "newConnections": 0
+        }
+      ],
+      "afterSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 304.114,
+          "totalMs": 348.26,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 230.44400000000002,
+          "totalMs": 272.28799999999995,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 235.844,
+          "totalMs": 279.233,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 247.671,
+          "totalMs": 291.738,
+          "wireBytes": 169,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 247.072,
+          "totalMs": 287.774,
+          "wireBytes": 169,
+          "newConnections": 0
+        }
+      ]
+    },
+    {
+      "path": "/api/activity",
+      "beforeTtfbMedianMs": 191.977,
+      "afterTtfbMedianMs": 248.568,
+      "ttfbReductionPercent": -29.47801038666091,
+      "beforeSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 222.792,
+          "totalMs": 263.841,
+          "wireBytes": 802,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 200.127,
+          "totalMs": 243.861,
+          "wireBytes": 802,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 191.977,
+          "totalMs": 235.841,
+          "wireBytes": 828,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 191.024,
+          "totalMs": 233.05100000000002,
+          "wireBytes": 830,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 182.689,
+          "totalMs": 223.83700000000002,
+          "wireBytes": 876,
+          "newConnections": 0
+        }
+      ],
+      "afterSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 248.568,
+          "totalMs": 291.171,
+          "wireBytes": 802,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 199.75,
+          "totalMs": 243.79999999999998,
+          "wireBytes": 802,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 274.183,
+          "totalMs": 315.51099999999997,
+          "wireBytes": 802,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 389.248,
+          "totalMs": 431.91,
+          "wireBytes": 828,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 191.578,
+          "totalMs": 231.789,
+          "wireBytes": 802,
+          "newConnections": 0
+        }
+      ]
+    },
+    {
+      "path": "/themes/firefly/js/home.js",
+      "beforeTtfbMedianMs": 51.692,
+      "afterTtfbMedianMs": 32.760999999999996,
+      "ttfbReductionPercent": 36.622688230287096,
+      "beforeSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 51.736999999999995,
+          "totalMs": 95.626,
+          "wireBytes": 5789,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 51.285,
+          "totalMs": 96.303,
+          "wireBytes": 5773,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 51.692,
+          "totalMs": 95.65899999999999,
+          "wireBytes": 5773,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 60.443,
+          "totalMs": 103.557,
+          "wireBytes": 5706,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 43.443000000000005,
+          "totalMs": 83.841,
+          "wireBytes": 5706,
+          "newConnections": 0
+        }
+      ],
+      "afterSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 31.358999999999998,
+          "totalMs": 71.79299999999999,
+          "wireBytes": 5821,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 33.388,
+          "totalMs": 75.438,
+          "wireBytes": 5821,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 32.760999999999996,
+          "totalMs": 75.283,
+          "wireBytes": 5821,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 33.669,
+          "totalMs": 75.849,
+          "wireBytes": 5821,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 29.858,
+          "totalMs": 72.036,
+          "wireBytes": 5821,
+          "newConnections": 0
+        }
+      ]
+    },
+    {
+      "path": "/media/2fc72121-2c93-4882-b0c0-7135269d501c/wallhaven-5gyjw3.jpg",
+      "beforeTtfbMedianMs": 1710.8980000000001,
+      "afterTtfbMedianMs": 754.068,
+      "ttfbReductionPercent": 55.925601643113744,
+      "beforeSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 1939.8999999999999,
+          "totalMs": 2003.5090000000002,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 1646.323,
+          "totalMs": 1702.884,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 1871.3029999999999,
+          "totalMs": 1934.329,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 1710.8980000000001,
+          "totalMs": 1815.6689999999999,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 1620.626,
+          "totalMs": 1675.773,
+          "wireBytes": 374857,
+          "newConnections": 0
+        }
+      ],
+      "afterSamples": [
+        {
+          "status": 200,
+          "ttfbMs": 791.333,
+          "totalMs": 852.542,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 728.801,
+          "totalMs": 783.644,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 780.022,
+          "totalMs": 879.4920000000001,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 754.068,
+          "totalMs": 811.821,
+          "wireBytes": 374857,
+          "newConnections": 0
+        },
+        {
+          "status": 200,
+          "ttfbMs": 700.995,
+          "totalMs": 766.2860000000001,
+          "wireBytes": 374857,
+          "newConnections": 0
+        }
+      ]
+    }
+  ],
+  "motionBefore": {
+    "visualDigest": "33c962b77baf1439c5d70d1e3656dfbafc1156630aa88f5647648ea45646b207",
+    "cases": [
+      {
+        "name": "hero",
+        "frames": 120,
+        "styleAssignments": 10560,
+        "styleMutations": 5216,
+        "geometryReads": 0,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "hero-rain",
+        "frames": 120,
+        "styleAssignments": 10560,
+        "styleMutations": 3377,
+        "geometryReads": 240,
+        "rainFrames": 120,
+        "rainSegments": 4320
+      },
+      {
+        "name": "guide",
+        "frames": 120,
+        "styleAssignments": 10560,
+        "styleMutations": 0,
+        "geometryReads": 120,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "blinds",
+        "frames": 120,
+        "styleAssignments": 10560,
+        "styleMutations": 418,
+        "geometryReads": 120,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "story",
+        "frames": 120,
+        "styleAssignments": 10560,
+        "styleMutations": 119,
+        "geometryReads": 120,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "footer",
+        "frames": 120,
+        "styleAssignments": 10560,
+        "styleMutations": 0,
+        "geometryReads": 120,
+        "rainFrames": 0,
+        "rainSegments": 0
+      }
+    ]
+  },
+  "motionAfter": {
+    "visualDigest": "33c962b77baf1439c5d70d1e3656dfbafc1156630aa88f5647648ea45646b207",
+    "cases": [
+      {
+        "name": "hero",
+        "frames": 120,
+        "styleAssignments": 9840,
+        "styleMutations": 5216,
+        "geometryReads": 0,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "hero-rain",
+        "frames": 120,
+        "styleAssignments": 9840,
+        "styleMutations": 3377,
+        "geometryReads": 0,
+        "rainFrames": 120,
+        "rainSegments": 4320
+      },
+      {
+        "name": "guide",
+        "frames": 120,
+        "styleAssignments": 82,
+        "styleMutations": 0,
+        "geometryReads": 0,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "blinds",
+        "frames": 120,
+        "styleAssignments": 595,
+        "styleMutations": 418,
+        "geometryReads": 0,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "story",
+        "frames": 120,
+        "styleAssignments": 119,
+        "styleMutations": 119,
+        "geometryReads": 0,
+        "rainFrames": 0,
+        "rainSegments": 0
+      },
+      {
+        "name": "footer",
+        "frames": 120,
+        "styleAssignments": 0,
+        "styleMutations": 0,
+        "geometryReads": 0,
+        "rainFrames": 0,
+        "rainSegments": 0
+      }
+    ]
+  }
+}

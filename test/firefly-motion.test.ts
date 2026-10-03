@@ -174,6 +174,27 @@ function replay() {
   win.document.dispatchEvent(new win.CustomEvent("mob:motion"));
   frame();
   expect(snapshot()).toEqual(beforeResize);
+  win.Mob.themeConfig.motion.enabled = false;
+  win.document.dispatchEvent(
+    new win.CustomEvent("mob:theme-config", { detail: {} }),
+  );
+  frame();
+  expect(
+    win.document.querySelector<HTMLElement>(".story-track")!.style.transform,
+  ).toBe("");
+  win.Mob.themeConfig.motion.enabled = true;
+  win.document.dispatchEvent(
+    new win.CustomEvent("mob:theme-config", { detail: {} }),
+  );
+  frame();
+  expect(snapshot()).toEqual(beforeResize);
+  desktop.matches = false;
+  win.dispatchEvent(new win.Event("resize"));
+  frame();
+  desktop.matches = true;
+  win.dispatchEvent(new win.Event("resize"));
+  frame();
+  expect(snapshot()).toEqual(beforeResize);
   expect(win.document.querySelectorAll(".mosaic-tile")).toHaveLength(24);
   expect(win.document.querySelectorAll(".story-scene")).toHaveLength(5);
   observer.disconnect();
