@@ -24,7 +24,8 @@
         let state;
         try { state = await window.Mob.api(base); }
         catch (error) {
-          if (!['UPLOAD_EXPIRED', 'UPLOAD_NOT_FOUND'].includes(error.code)) throw error;
+          const expired = Number.isFinite(Date.parse(session.expiresAt)) && Date.parse(session.expiresAt) <= Date.now();
+          if (!['UPLOAD_EXPIRED', 'UPLOAD_NOT_FOUND'].includes(error.code) && !(error.code === 'UPLOAD_CLOSED' && expired)) throw error;
           // Session cleanup must not cause a second copy of an already completed file.
           try {
             const saved = await window.Mob.api('/api/admin/gallery/items', { method: 'POST', json: { id: session.id, source } });

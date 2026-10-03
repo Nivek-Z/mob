@@ -107,7 +107,7 @@ describe('theme frontends', () => {
     expect(await task()).toMatchObject(item); expect(creates).toBe(1);
     dom.window.close();
   });
-  it('starts a new session when an incomplete upload expires, while retaining the original file for retry', async () => {
+  it.each(['UPLOAD_EXPIRED', 'UPLOAD_CLOSED'])('retries an expired incomplete upload reporting %s with the original file', async code => {
     const { dom, win } = fixture('frontend/themes/firefly/admin/index.html', 'frontend/core/upload.js');
     const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
     const record = { id: ids[1], filename: 'clip.png', contentType: 'image/png', url: 'https://blog.example.com/media/' + ids[1] + '/clip.png' };
@@ -118,18 +118,30 @@ describe('theme frontends', () => {
     }
     win.XMLHttpRequest = XHR as unknown as typeof win.XMLHttpRequest;
     win.Mob.api = vi.fn(async (path, options) => {
-      if (path === '/api/admin/uploads') return { id: ids[creates++], mode: 'single' };
+      if (path === '/api/admin/uploads') return { id: ids[creates++], mode: 'single', expiresAt: new Date(Date.now() + (creates === 1 ? -1000 : 86_400_000)).toISOString() };
       if (path === '/api/admin/gallery/items') {
         if (options.json.id === ids[0]) throw Object.assign(new Error('Not completed'), { code: 'MEDIA_NOT_READY' });
         return { item: record };
       }
       if (++lookups === 1) throw new Error('Network interrupted');
-      throw Object.assign(new Error('Expired'), { code: 'UPLOAD_EXPIRED' });
+      throw Object.assign(new Error('Expired'), { code });
     });
     const task = win.Mob.uploadTask(new win.File(['png'], 'clip.png', { type: 'image/png' }), 'gallery');
     await expect(task()).rejects.toThrow('Network');
     expect(await task()).toEqual(record); expect(creates).toBe(2);
     expect(sent).toEqual(['/api/admin/uploads/' + ids[1] + '/body']);
     dom.window.close();
+  });
+  it('keeps an explicitly cancelled unexpired session closed', async () => {
+    const { dom, win } = fixture('frontend/themes/firefly/admin/index.html', 'frontend/core/upload.js');
+    let creates = 0;
+    win.Mob.api = vi.fn(async path => {
+      if (path === '/api/admin/uploads') { creates++; return { id: '11111111-1111-4111-8111-111111111111', mode: 'single', expiresAt: new Date(Date.now() + 86_400_000).toISOString() }; }
+      throw Object.assign(new Error('Cancelled'), { code: 'UPLOAD_CLOSED' });
+    });
+    const task = win.Mob.uploadTask(new win.File(['png'], 'clip.png', { type: 'image/png' }), 'editor');
+    await expect(task()).rejects.toMatchObject({ code: 'UPLOAD_CLOSED' });
+    await expect(task()).rejects.toMatchObject({ code: 'UPLOAD_CLOSED' });
+    expect(creates).toBe(1); dom.window.close();
   });
 });
